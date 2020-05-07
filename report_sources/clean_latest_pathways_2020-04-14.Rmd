@@ -1,0 +1,357 @@
+---
+title: "COVID19 real-time analysis: NHS Pathways data importing & cleaning"
+author: "Quentin Leclerc"
+date: "`r format(Sys.time(), '%A %d %B %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn
+    number_sections: yes
+    theme: spacelab
+    toc: yes
+    toc_collapse: no
+    toc_depth: 4
+    toc_float: yes
+    css: !expr here::here('css', 'style.css')
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      collapse = TRUE,
+                      fig.width = 8,
+                      fig.height = 6,
+                      dpi = 150,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Data preparation {.tabset .tabset-fade .tabset-pills}
+
+## Outline
+
+
+* **Load scripts**: loads libraries and useful scripts used in the analyses; all
+`.R` files contained in `scripts` at the root of the factory are automatically
+loaded
+
+* **Load data**: imports datasets, and may contain some *ad hoc* changes to the
+data such as specific data cleaning (not used in other reports), new variables
+used in the analyses, etc.
+
+
+
+## Load packages
+
+```{r libraries}
+
+library(reportfactory)
+library(here)
+library(tidyverse)
+library(linelist)
+library(xml2)
+library(rvest)
+
+```
+
+
+
+## Load scripts
+
+These scripts will load:
+
+* all local scripts, stored as `.R` filesinside `/scripts/`
+* all global scripts, i.e. stored outside the factory in `../scripts/`
+
+```{r load_scripts}
+
+rfh_load_scripts()
+
+```
+
+
+
+
+
+## Load data
+
+The latest NHS Pathways data is automatically detected using
+`fetch_url_pathways_calls()` and `fetch_url_pathways_online()`. We also recover the date from the url:
+
+```{r load_data}
+
+#fetch the latest data
+current_pathways_calls <- fetch_url_pathways_calls() 
+current_pathways_online <- fetch_url_pathways_online()
+
+#get the date of the latest data
+pathways_calls_date <- linelist::guess_dates(current_pathways_calls)
+pathways_online_date <- linelist::guess_dates(current_pathways_online)
+
+```
+
+We load the data:
+
+```{r pathways_import}
+
+#import the data
+pathways_calls <- rio::import(current_pathways_calls)
+pathways_online <- rio::import(current_pathways_online)
+
+```
+
+The **completion date** of the NHS Pathways 111 and 999 calls data is
+**`r format(pathways_calls_date, format = "%A %d %b %Y")`**, and the 
+**completion date** of the NHS Pathways 111 online data is
+**`r format(pathways_online_date, format = "%A %d %b %Y")`**.
+
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Process data {.tabset .tabset-fade .tabset-pills}
+
+## Clean data
+
+We first clean the data:
+
+```{r clean_data_calls}
+
+pathways_calls <- linelist::clean_data(pathways_calls,
+                                wordlists = cleaning_rules,
+                                guess_dates = FALSE)
+pathways_calls$call_date <- linelist::guess_dates(pathways_calls$call_date, error_tolerance = 1)
+head(pathways_calls)
+
+```
+
+```{r clean_data_online}
+
+pathways_online <- linelist::clean_data(pathways_online,
+                                wordlists = cleaning_rules,
+                                guess_dates = FALSE)
+pathways_online$journeydate <- linelist::guess_dates(pathways_online$journeydate, error_tolerance = 1)
+head(pathways_calls)
+
+```
+
+## Rename data
+
+We then rename the variables in the data:
+
+```{r rename_variables}
+
+pathways_calls <- pathways_calls %>%
+  rename(site_type = contains("sitetype"),
+         date = contains("call_date"),
+         age = contains("ageband"),
+         ccg_code = contains("ccgcode"),
+         ccg_name = contains("ccgname"),
+         count = contains("triagecount"))
+
+pathways_online <- pathways_online %>%
+  rename(date = contains("journeydate"),
+         age = contains("ageband"),
+         ccg_code = contains("ccgcode"),
+         ccg_name = contains("ccgname"),
+         count = contains("total"))
+
+#small edit for consistency in age groups
+pathways_online$age <- gsub("70_years", "70_120_years", pathways_online$age)
+
+```
+
+## Merge both datasets
+
+We merge the 111 and 999 calls with the 111 online data:
+
+```{r merge_datasets}
+
+site_type <- rep("111_online", nrow(pathways_online))
+
+pathways_online <- cbind(site_type, pathways_online)
+
+pathways_all <- rbind(pathways_calls, pathways_online)
+
+```
+
+
+## Reformat age classes
+
+Finally, we correct the formatting of the age classes:
+
+```{r reformat_ages}
+
+pathways_all$age <- gsub("_years", "", pathways_all$age)
+pathways_all$age <- gsub("_", "-", pathways_all$age)
+head(pathways_all)
+
+```
+
+## Add variables
+
+We also add NHS regions to the data:
+
+```{r add_nhs}
+
+ccg_info <- import_ccg_info() %>%
+  as_tibble() %>%
+  clean_data()
+head(ccg_info)
+
+pathways_all <- left_join(pathways_all,
+                     rename(ccg_info, ccg_name = name))
+head(pathways_all)
+
+```
+
+
+## Add timestamp
+
+Add dataset version date as an attribute for later reference.
+
+```{r add_timestamp}
+
+attr(pathways_all, "timestamp") <- pathways_calls_date
+
+```
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Export data {.tabset .tabset-fade .tabset-pills}
+
+## R objects
+
+We export the clear database, placed in `produced_rds/` as well as in
+`data/rds`:
+
+```{r export_rds}
+
+## check if a directory exists and if not then creates it
+if (!dir.exists("produced_rds")) {
+  dir.create("produced_rds")
+}
+
+## create the text for the file name with the database date
+rds_file_name <- sprintf("%sclear_%s.rds",
+                         "pathways_",
+                         format(pathways_calls_date, "%Y-%m-%d"))
+rds_file_name
+
+## save the rds file in the produced_rds folder
+saveRDS(pathways_all,
+        file.path("produced_rds", rds_file_name))
+```
+
+We copy these files to the `data/rds` folder:
+
+```{r copy_rds}
+## copy some files into `data/rds`
+
+## provide the destination of where to copy the data
+destination <- here("data",
+                    "rds",
+                    rds_file_name)
+## copy the rds data
+file.copy(from = file.path("produced_rds", rds_file_name),
+          to = destination,
+          overwrite = TRUE)
+
+## copy to the generic 'latest' data file
+destination <- here("data",
+                    "rds",
+                    "pathways_clear_latest.rds")
+file.copy(from = file.path("produced_rds", rds_file_name),
+          to = destination,
+          overwrite = TRUE)
+
+```
+
+
+
+
+## Update the `current_pathways.R` script
+
+```{r update_script}
+
+## path to the output file 
+script_destination <- here::here("scripts",
+                                 "current_pathways.R")
+
+## comments to say when this was updated
+txt <- paste("## This file is generated automatically by `clean_latest_pathways`",
+             "## Do not edit it by hand!\n",
+             sep = "\n")
+cat(txt, file = script_destination, append = FALSE)
+
+txt <- sprintf("\n## This file was last updated on the: %s\n",
+               Sys.time())
+cat(txt, file = script_destination, append = TRUE)
+
+## actual content of the script
+txt <- sprintf('\ncurrent_pathways <- here::here("data",
+                                 "rds",
+                                 "%s")',
+               rds_file_name)
+cat(txt, file = script_destination, append = TRUE)
+
+```
+
+
+
+
+
+
+
+<!-- =======================================================  -->
+<!-- =======================================================  -->
+<!-- ======================================================= -->
+
+# System information {.tabset .tabset-fade .tabset-pills}
+
+## Outline
+
+The following information documents the system on which the document was
+compiled.
+
+
+## System 
+
+This provides information on the operating system.
+
+```{r system_info}
+Sys.info()
+```
+
+## R environment
+
+This provides information on the version of R used:
+
+```{r R_session}
+R.version
+```
+
+
+## R packages
+
+This provides information on the packages used:
+
+```{r R_pkg}
+sessionInfo()
+```

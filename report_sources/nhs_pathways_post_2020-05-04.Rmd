@@ -1,0 +1,339 @@
+---
+title: "Analysis of spatio-temporal trends in potential COVID-19 cases reported through NHS Pathways"
+author: "Quentin J. Leclerc, Emily S. Nightingale, CMMID COVID-19 Working Group, Thibaut Jombart"
+date: "`r format(Sys.time(), '%A %d %B %Y')`"
+output:
+  word_document
+header-includes:
+ \usepackage{xcolor}
+ \usepackage{float}
+ \floatplacement{figure}{H}
+ \floatplacement{table}{H}
+ \usepackage[labelfont=bf]{caption}
+urlcolor: blue
+bibliography: ../data/bib/nhs_paths_bib.bib
+csl: ../data/bib/vancouver-brackets.csl
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+
+library(rio)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(knitr)
+library(kableExtra)
+library(bookdown)
+library(here)
+
+```
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+
+# Introduction
+
+The coronavirus 2019 disease (COVID-19) is caused by SARS-CoV-2, a novel
+coronavirus originally identified in Wuhan (China) in December 2019 [@whositrep]. As of
+the beginning of May 2020, more than 3 million confirmed COVID-19 cases and
+200,000 deaths have been reported worldwide [@whositrep]. To mitigate epidemic spread
+and prevent healthcare systems from being overrun, countries have implemented
+different measures to slow down transmission, such as travel restrictions and
+various degrees of social distancing [@articlelockdown]. 
+
+England is one of the countries most affected by the COVID-19 pandemic in
+Europe, with more than 120,000 confirmed cases and 25,000 deaths reported as of
+the beginning of May 2020 [@coviduk]. However, these numbers mostly reflect
+hospitalised cases [@coviduk], and thus fail to account for milder and asymptomatic
+cases, which likely represent a large fraction of the total cases [@Mizumoto2020]. We
+should therefore explore alternative, community-driven surveillance data to
+help characterise the progression of the COVID-19 epidemic in the country.
+
+NHS Pathways is a triage system for public calls and online reports for medical
+care [@nhspathways]. This system is currently being used throughout England to assist
+individuals reporting potential COVID-19 symptoms. Since the 18th of March 2020,
+data on daily phone calls and completed online assessments which have received a
+potential COVID-19 final disposition are [openly
+available](https://digital.nhs.uk/data-and-information/publications/statistical/mi-potential-covid-19-symptoms-reported-through-nhs-pathways-and-111-online/latest). These
+assessments are either made through calls to 111 and 999, or through 111 online
+reports. While these assessments correspond to a minority of confirmed
+(tested-positive) cases, they may be able to capture COVID-19 incidence of the
+wider epidemic taking place in the community.
+
+Here, we use NHS Pathways data to assess the spatio-temporal dynamics of
+COVID-19 in England. Specifically, we investigated potential changes in the
+growth rate of the epidemic over time, and compared the observed patterns across
+NHS regions. We derived time-varying estimates of the growth rates, halving time
+and effective reproduction numbers for the different regions, and looked for
+potential differences in age class distributions.
+
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Methods
+
+## Data extraction
+
+We extracted the latest NHS Pathways data through the [NHS Digital
+website](https://digital.nhs.uk/data-and-information/publications/statistical/mi-potential-covid-19-symptoms-reported-through-nhs-pathways-and-111-online/latest),
+where they are updated daily (except week-ends). This dataset contains daily
+number of calls to 111 and 999, as well as 111-online reports that classified as
+potential COVID-19 cases, broken down by Clinical Commissioning Group (CCG),
+gender, and age group (0-18, 19-69 and 70-120 years old) of the patients. We
+mapped the CCGs to their corresponding NHS regions using publicly available CCG
+data [@ccgtonhs], and use this geographic resolution for our analysis. All dates
+indicated refer to the date of reporting.
+
+
+
+## Spatio-temporal analysis
+
+```{r setup_data}
+
+last_output_dir <- reportfactory::filter_log(
+  readRDS(here::here(".compile_log.rds")),
+  file = "nhs_pathways_2020-05-04.Rmd",
+  most_recent = TRUE)[[1]]$output_dir
+
+figure_folder <- file.path(last_output_dir, "figures", "nhs_paths")
+tables_folder <- file.path(last_output_dir, "excel_tables")
+
+latest_data <- rio::import(file.path(tables_folder, "r_all_sliding.xlsx"))
+
+latest_data_grouped <- latest_data %>%
+  group_by(w_max) %>%
+  summarise(r = mean(r, na.rm = TRUE),
+            r_lower = mean(lower_95, na.rm = TRUE),
+            r_upper = mean(upper_95, na.rm = TRUE),
+            halving = mean(halving_t, na.rm = TRUE),
+            halving_lower = mean(halving_t_lower_95, na.rm = TRUE),
+            halving_upper = mean(halving_t_upper_95, na.rm = TRUE),
+            R = mean(R, na.rm = TRUE),
+            R_lower = mean(R_lower_95, na.rm = TRUE),
+            R_upper = mean(R_upper_95, na.rm = TRUE))
+
+min_grouped <- which.min(latest_data_grouped$halving)
+
+reportfactory::rfh_load_scripts()
+x <- import_clear_pathways()
+
+max_date <- max(x$date)
+min_date <- min(x$date)
+
+prop_ages_temp <- x %>%
+  filter(age != "missing") %>%
+  group_by(age) %>%
+  summarise(tot = sum(count)) %>%
+  mutate(tot = round(tot/sum(tot), 2))
+
+prop_ages <- prop_ages_temp$tot
+names(prop_ages) <- prop_ages_temp$age
+
+```
+
+Total numbers of notifications (including all three data sources: 111/999 calls,
+and 111-online notifications) were modelled using quasi-Poisson generalised
+linear models (GLM) with log links, in order to account for exponential
+trends as well as over-dispersion of the data. Predictors included time (in days
+since the first data point) as well as interaction terms for varying slopes and intercepts between NHS regions. Growth rates $r$ and their 95%
+confidence intervals were directly deduced from the corresponding
+coefficients. All models were fitted using maximum-likelihood.
+
+To assess potential changes of the growth rate over time, analyses were
+performed over rolling windows of 14 days from the earliest available date 
+(`r format(min_date, "%A %d %B %Y")`) to the latest available one 
+(`r format(max_date, "%A %d %B %Y")`), with each time window being shifted by a single
+day. Growth rates and associated confidence intervals were calculated for
+each time window. Corresponding halving times were calculated as $log(0.5) / r$
+whenever $r$ was significantly less than 0, i.e. when the upper bound of the
+confidence interval was negative. Growth rates were converted to effective
+reproduction numbers $R_e$ using the approach described in Wallinga and Lipsitch
+[@Wallinga2007] and implemented in the epitrix package [@epitrixcite], with a serial
+interval distribution derived from previous analysis [@Nishiura2020] 
+(mean = 4.7 days, standard deviation = 2.9 days).
+
+All analyses were performed using the R software [@rcite].
+
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Results
+
+Overall notifications of potential COVID-19 cases through NHS Pathways have been
+clearly decreasing in all NHS regions since the first date included in the
+dataset and until approximately the 13th April, after which the trend seems
+to plateau (Figure \@ref(fig:volume)). Weekly spikes were consistently
+observed for all NHS regions, with increased notifications on Mondays likely
+reflecting less reporting happening over weekends.
+
+
+```{r volume, fig.cap="\\small \\label{fig:volume}\\textbf{Daily NHS Pathways notifications classified as potential COVID-19 cases, by NHS region}. Data include calls to 111 and 999, as well as 111 online reports. Dates correspond to the date of case notification. The black line and grey ribbon correspond to a lowess smoother and its 95\\% confidence interval.", out.width = "50%", fig.align = "center"}
+
+knitr::include_graphics(file.path(figure_folder, "all_volume-1.png"))
+
+```
+
+As epidemics are expected to decrease exponentially, a plateau in case incidence
+would be expected even if the growth rate remained constant (and negative) over
+time period considered. However, this could also reflect a genuine change in the
+growth rate over time. Analyses over sliding time windows show that daily growth
+rates have likely been changing markedly over time. 
+
+
+Results show a marked decrease in growth rates ($r$) and effective reproduction
+numbers ($R_e$) until the 6th April 2020, after which these numbers remained low
+in all NHS regions for a period of about two weeks (Figure
+\@ref(fig:trendsgrowth). The lowest $r$ estimated over all NHS regions was
+observed for the time period ranging from 
+`r format(latest_data_grouped$w_max[min_grouped]-14, "%A %d %B %Y")` to 
+`r format(latest_data_grouped$w_max[min_grouped], "%A %d %B %Y")` at 
+`r round(latest_data_grouped$r[min_grouped], 2)` 
+(95% CI: 
+`r round(latest_data_grouped$r_lower[min_grouped], 2)` -- 
+`r round(latest_data_grouped$r_upper[min_grouped], 2)`), 
+corresponding to a halving time of 
+`r round(latest_data_grouped$halving[min_grouped], 2)` days (95% CI: 
+`r round(latest_data_grouped$halving_lower[min_grouped], 2)` -- 
+`r round(latest_data_grouped$halving_upper[min_grouped], 2)`) and an $R_e$ of 
+`r round(latest_data_grouped$R[min_grouped], 2)` 
+(95% CI: `r round(latest_data_grouped$R_lower[min_grouped], 2)` -- 
+`r round(latest_data_grouped$R_upper[min_grouped], 2)`). Similar trends were
+observed across all NHS regions, with the exception of London which showed lower
+$r$ (and $R_e$) after the 13th of April.
+
+
+
+```{r growth, fig.cap="\\small \\label{fig:trendsgrowth}\\textbf{Estimates of daily growth rates ($r$) and effective reproduction numbers ($R_e$) for potential COVID-19 cases reported through NHS Pathways.} Dotted lines indicate the central estimate, and ribbons their 95\\% confidence intervals. Estimates are indicated at the end of the time window used for estimation, so that values of $r$ and $R_e$ provided on a given day corresponds to the 2 weeks leading up to that day.", out.width = "75%", fig.align = "center"}
+
+knitr::include_graphics(file.path(figure_folder, "fig2_3-1.png"))
+
+```
+
+Confidence intervals suggest $r$ values remained significantly lower than 0 (and
+$R_e$ lower than 1) in all regions until the 15th of April, consistent with a
+significant decrease in COVID-19 related notifications. After this, values of
+$r$ and $R_e$ seem to have gradually increased, to a point where no NHS region
+showed any significant decrease in COVID-19 notifications as of the 4th
+May 2020. The last regions to show significant decline in COVID-19 were London
+(28th April 2020) and the East of England (1sth May 2020). 
+The most recent estimate of $r$ averaged over all NHS regions is
+`r round(dplyr::last(latest_data_grouped$r), 2)` 
+(95% CI: `r round(dplyr::last(latest_data_grouped$r_lower), 2)` -- 
+`r round(dplyr::last(latest_data_grouped$r_upper), 2)`), corresponding to 
+an $R_e$ of 
+`r round(dplyr::last(latest_data_grouped$R), 2)` 
+(95% CI: `r round(dplyr::last(latest_data_grouped$R_lower), 2)` -- 
+`r round(dplyr::last(latest_data_grouped$R_upper), 2)`).
+
+
+
+
+```{r ageprops, fig.cap="\\small \\label{fig:ageprops}\\textbf{Proportion of NHS Pathways notifications classified as potential COVID-19 cases by age group.} Horizontal, solid lines represent the age distribution for the total population of the corresponding NHS region.", out.width = "60%", fig.align = "center"}
+knitr::include_graphics(file.path(figure_folder, "all_volume_age-2.png"))
+```
+
+
+A majority of all notifications (`r prop_ages["19-69"]*100`%) came from individuals
+between 19 and 69 years old. Despite some temporal variation, the proportion of
+cases from this age group exceeded proportions in the general population in all
+NHS regions (Figure \@ref(fig:ageprops)). The proportion of notifications of 
+patients 0-18 years old decreased rapidly in all regions from mid-March (about
+20%) to early April (about 10%).
+
+
+```{r growth-kids, fig.cap="\\small \\label{fig:trendsgrowthkids}\\textbf{Estimates of daily growth rates ($r$) and effective reproduction numbers ($R_e$) for potential COVID-19 cases aged 0 to 18 years old reported through NHS Pathways.} Dotted lines indicate the central estimate, and ribbons their 95\\% confidence intervals. Estimates are indicated at the end of the time window used for estimation, so that values of $r$ and $R_e$ provided on a given day corresponds to the 2 weeks leading up to that day.", out.width = "75%", fig.align = "center"}
+
+knitr::include_graphics(file.path(figure_folder, "fig2_3_0_18-1.png"))
+
+```
+
+
+Interestingly, this apparent change in age composition of notifications
+coincides with the strong initial decrease in $r$ and $R_e$ (Figures
+\@ref(fig:volume) and \@ref(fig:trendsgrowth)). We also note that the proportion
+of 0-18 year old individuals increases again from the 20th April 2020 in most
+NHS region, which again coincides with the apparent increase in $r$ and $R_e$.
+In fact, when considering only 0-18 year-old individuals, estimates of the
+transmissibility seems to have possibly increased over the threshold values in
+the last week of April 2020 (Figure \@ref(fig:trendsgrowthkids)).
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Discussion
+
+We analysed publicly available NHS Pathways data to assess the spatio-temporal
+dynamics of the COVID-19 epidemic in England. Our results suggest that after a
+sharp initial decrease up until early April 2020, transmissibility may have slowly
+increased until early May, at which point it becomes unclear if cases are still
+declining as confidence intervals of $r$ and $R_e$ include the threshold
+values for growth / decline (respectively, 0 and 1) in all NHS regions.
+
+
+A number of caveats may affect our results. Firstly, the data we considered are at
+best a proxy for the true incidence of COVID-19 in the country as they include
+mostly untested patients. As NHS Pathways is based on self-reporting, several 
+biases could affect the data, such as changes in service availability and delays 
+in the uptake of the 111-online reporting system. When estimating growth rates over
+time and geographic regions, we implicitly assume that self-reporting behaviours
+have not substantially changed over time, and have been similar across different
+NHS regions. Similarly, differences in self-reporting behaviours across
+various age groups would likely bias the age composition of the potential
+COVID-19 cases reported here. While NHS Pathways data may better capture
+the epidemic in the community than hospitalisation data, these data do not only
+reflect community cases. In fact, a large fraction of cases reported through 999
+are likely to be hospitalised, as well as smaller proportions of cases reported
+through 111 calls and 111 online. Therefore, the data we considered here most likely
+reflect the epidemic as a whole, rather than just in the community. We also note that
+all results presented rely on dates of notifications, so that estimates of
+transmissibility are likely lagged by a few days compared to the true,
+underlying epidemic. Unfortunately, the delays from exposure to notification
+through NHS Pathways cannot be estimated from currently available data.
+
+
+Despite these limitations, the large volume of data considered, combined with
+consistent patterns observed across different NHS regions, suggest our results
+may at least partly capture genuine dynamics of the COVID-19 epidemic in
+England. The initial sharp decrease in potential COVID-19 cases suggests that
+social distancing measures put in place have had a strong impact on reducing
+transmission and brought the effective reproduction number under 1 across all NHS
+regions. However, the more recent estimates of $R_e$ suggest that
+transmissibility might have increased again since, such that it is no longer clear
+that case incidence is declining. The fact that these patterns coincide with
+apparent changes in the age structure of notifications, together with the
+possible increase of $r$ and $R_e$ above threshold levels in 0-18 year-old
+individuals, calls for further explorations of age-dependent factors in
+relation to COVID-19 transmission.
+
+
+
+
+
+\newpage
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# References
