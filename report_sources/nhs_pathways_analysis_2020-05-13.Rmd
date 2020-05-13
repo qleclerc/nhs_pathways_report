@@ -1,6 +1,6 @@
 ---
 title: "Analysis of 111/999 NHS calls and 111 online reports"
-author: "Quentin Leclerc, Emily Nightingale, Samuel Abbott &  for CMMID"
+author: "Quentin Leclerc, Emily Nightingale, Samuel Abbott & Thibaut Jombart, for CMMID"
 date: "`r format(Sys.time(), '%A %d %B %Y')`"
 output:
   html_document:
@@ -86,16 +86,6 @@ These scripts also contain routines to access the latest clean encrypted data
 
 ```{r load_scripts}
 
-## load all scripts without need for data key
-
-## note: this assumes `params` is either a list containing compilation
-## parameters, or does not exist
-
-if(exists("params") && is.list(params)) {
-  params$no_key <- TRUE
-} else {
-  params <- list(no_key = TRUE)
-}
 reportfactory::rfh_load_scripts()
 
 ```
@@ -111,7 +101,7 @@ We import the latest NHS pathways data:
 
 ```{r load_data}
 
-x <- import_clear_pathways() %>%
+x <- import_pathways() %>%
   as_tibble()
 x
 
@@ -135,7 +125,7 @@ Import publically available deaths per NHS region:
 
 ```{r import_deaths}
 
-dth <- import_clear_online_deaths() %>%
+dth <- import_deaths() %>%
   mutate(nhs_region = str_to_title(gsub("_"," ",nhs_region)))
 
 dth$nhs_region <- gsub(" Of ", " of ", dth$nhs_region)
@@ -244,8 +234,7 @@ get_r <- function(model) {
 
 ```
 
-Function to classify the day of the week into *weekend*, *Monday*, and *the
-rest*:
+Function to classify the day of the week into *weekend*, *Monday*, and *the rest*:
 
 ```{r day_of_week}
 
@@ -286,673 +275,7 @@ blue_pal <- c("#8cb5f5","#00a1bd","#004480")
 <!-- ======================================================== -->
 <!-- ======================================================== -->
 
-# 111 COVID-19 calls {.tabset .tabset-fade .tabset-pills}
-
-## Outline
-
-We look for spatio-temporal patterns in COVID-19 related 111 calls. Analyses are
-broken down by NHS region. We also look for estimates of recent growth rate and
-associated doubling / halving time.
-
-
-## Regional breakdown
-
-```{r tab_regions_111}
-
-tab_regions_111 <- x %>%
-  filter(site_type == "111") %>% 
-  group_by(nhs_region) %>%
-  summarise(n = sum(count))
-
-tab_regions_111 %>%
-  ggplot(aes(x = nhs_region, y = n)) +
-  geom_col() +
-  theme_bw() +
-  large_txt +
-  coord_flip() +
-  labs(x = "",
-       y = "Total number of calls",
-       title = "Total 111 calls by region") 
-
-tab_regions_111 %>%
-  adorn_totals() %>% 
-  dt_tab()
-
-```
-
-
-
-## By region over time
-
-```{r 111_volume, fig.height = 6}
-
-tab_date_region_111 <- x %>%
-  filter(!is.na(nhs_region),
-         site_type == "111") %>%
-  group_by(date, nhs_region) %>%
-  summarise(n = sum(count))
-
-tab_date_region_111 %>%
-  ggplot(aes(x = date, y = n, color = nhs_region)) +
-  geom_line() +
-  geom_point() +
-  geom_smooth(method = "loess", span = .5, color = "black") +
-  theme_bw() +
-  large_txt +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  rotate_x + 
-  guides(color = guide_legend(title = "", ncol = 3)) +
-  scale_colour_manual(values = pal) +
-  labs(title = "COVID-19 related 111 calls over time",
-       x = NULL,
-       y = "Number of 111 calls")
-
-tab_date_region_111 %>% 
-  adorn_totals() %>%
-  spread(nhs_region, n, fill = 0, drop = FALSE) %>%
-  adorn_totals(c("row", "col")) %>% 
-  dt_tab()
-
-```
-
-## By region by age over time
-
-We plot the number of 111 calls by age, and the proportion of 111 calls by age.
-In the second graph, the vertical lines indicate the proportion of individuals 
-residing in the corresponding NHS region who belong to the corresponding age group. 
-
-```{r 111_volume_age, fig.height = 6}
-
-tab_date_region_age_111 <- x %>%
-  filter(!is.na(nhs_region),
-         age != "missing",
-         site_type == "111") %>%
-  group_by(date, nhs_region, age) %>%
-  summarise(n = sum(count))
-
-tab_date_region_age_111 %>%
-  ggplot(aes(x = date, y = n, fill = age)) +
-  geom_col(position = "stack") +
-  scale_fill_manual(values = blue_pal) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 90, hjust = 1)) +
-  guides(fill = guide_legend(title = "Age group", ncol = 3)) +
-  labs(title = "COVID-19 related 111 calls\nby age and region over time",
-       x = NULL,
-       y = "Number of 111 calls by age") +
-  facet_wrap(~ nhs_region, ncol = 4)
-
-
-tab_date_region_age_111 <- tab_date_region_age_111 %>%
-  group_by(date, nhs_region) %>%
-  summarise(tot = sum(n)) %>%
-  left_join(tab_date_region_age_111, by = c("date", "nhs_region")) %>%
-  mutate(prop_n = n/tot)
-
-
-tab_date_region_age_111 %>%
-  ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = blue_pal) +
-  geom_line() +
-  geom_point() +
-  geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 90, hjust = 1)) +
-  guides(color = guide_legend(title = "Age group", ncol = 3)) +
-  labs(title = "Proportion of COVID-19 related 111 calls\nby age and region over time",
-       x = NULL,
-       y = "Proportion of 111 calls by age") +
-  facet_wrap(~ nhs_region, ncol = 4)
-
-
-```
-
-
-## Statistical model
-
-We fit quasi-Poisson GLMs to each NHS regions, using orthogonal polynomials of
-time to check if there are strongly non-linear trends. Constant (linear function
-of time) growth rates are estimated as well as halving/doubling times.
-
-```{r model_111}
-
-## make data for model
-x_model_111 <- x %>%
-  filter(!is.na(nhs_region),
-         site_type == "111",
-         date >= (database_date - 21)) %>% 
-  group_by(date, nhs_region) %>%
-  summarise(n = sum(count))
-
-## add 'day' for convenience
-first_date <- min(x_model_111$date)
-last_date <-  max(x_model_111$date)
-x_model_111 <- x_model_111 %>%
-  mutate(day = as.integer(date - first_date)) %>% 
-  day_of_week()
-
-
-
-## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
-            data = x_model_111,
-            family = "quasipoisson"))
-
-## get linear model
-model_111 <- glm(n ~ day * nhs_region + day_of_week,
-                 data = x_model_111,
-                 family = "quasipoisson")
-summary(model_111)
-Rsq(model_111)
-
-```
-
-
-We get the coefficients and 95% confidence intervals, and display results;
-halving times are not plotted if the confidence interval of the corresponding
-growth rate includes 0.
-
-
-```{r r_111}
-
-r_111 <- get_r(model_111)
-
-## plot growth rates
-r_111 %>%
-  ggplot(aes(x = nhs_region, y = r)) +
-  geom_errorbar(aes(ymin = lower_95, ymax = upper_95)) +
-  geom_point() +
-  coord_flip() +
-  geom_hline(aes(yintercept = 0), linetype = 2) +
-  theme_bw() +
-  large_txt +
-  scale_colour_manual(values = pal) +
-  labs(x = "",
-       y = "Estimated growth rate",
-       title = "Growth rates in 111 calls (last 3 weeks)")
-
-
-## plot halving times
-r_111 %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = nhs_region, y = halving_t)) +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_point() +
-  coord_flip() +
-  theme_bw() +
-  large_txt +
-  ylim(c(0, 80)) +
-  scale_colour_manual(values = pal) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 111 calls (last 3 weeks)",
-       subtitle = "upper bounds > 80 days not shown")
-
-
-## table
-r_111 %>%
-  mutate_at(vars(r:upper_95), .funs = function(x) round(x, 2)) %>%
-  mutate_at(vars(contains("halving")), .funs = round) %>%
-  dt_tab()
-
-```
-
-
-
-
-
-<!-- ======================================================== -->
-<!-- ======================================================== -->
-<!-- ======================================================== -->
-
-# 999 COVID-19 calls {.tabset .tabset-fade .tabset-pills}
-
-## Outline
-
-We look for spatio-temporal patterns in COVID-19 related 999 calls. Analyses are
-broken down by NHS region. We also look for estimates of recent growth rate and
-associated doubling / halving time.
-
-
-## Regional breakdown
-
-```{r tab_regions_999}
-
-tab_regions_999 <- x %>%
-  filter(site_type == "999") %>% 
-  group_by(nhs_region) %>%
-  summarise(n = sum(count))
-
-tab_regions_999 %>%
-  ggplot(aes(x = nhs_region, y = n)) +
-  geom_col() +
-  theme_bw() +
-  large_txt +
-  coord_flip() +
-  scale_colour_manual(values = pal) +
-  labs(x = "",
-       y = "Total number of calls",
-       title = "Total 999 calls by region")
-
-tab_regions_999 %>%
-  adorn_totals() %>% 
-  dt_tab()
-
-```
-
-
-
-## By region over time
-
-```{r 999_volume, fig.height = 6}
-
-tab_date_region_999 <- x %>%
-  filter(!is.na(nhs_region),
-         site_type == "999") %>%
-  group_by(date, nhs_region) %>%
-  summarise(n = sum(count))
-
-tab_date_region_999 %>%
-  ggplot(aes(x = date, y = n, color = nhs_region)) +
-  geom_line() +
-  geom_point() +
-  geom_smooth(method = "loess", span = .5, color = "black") +
-  theme_bw() +
-  large_txt +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  rotate_x + 
-  guides(color = guide_legend(title = "", ncol = 3)) +
-  labs(title = "COVID-19 related 999 calls over time",
-       x = NULL,
-       y = "Number of 999 calls") +
-  scale_colour_manual(values = pal)
-
-tab_date_region_999 %>% 
-  adorn_totals() %>%
-  spread(nhs_region, n, fill = 0, drop = FALSE) %>%
-  adorn_totals(c("row", "col")) %>% 
-  dt_tab()
-
-```
-
-## By region by age over time
-
-We plot the number of 999 calls by age, and the proportion of 999 calls by age.
-In the second graph, the vertical lines indicate the proportion of individuals 
-residing in the corresponding NHS region who belong to the corresponding age group. 
-
-```{r 999_volume_age, fig.height = 6}
-
-tab_date_region_age_999 <- x %>%
-  filter(!is.na(nhs_region),
-         age != "missing",
-         site_type == "999") %>%
-  group_by(date, nhs_region, age) %>%
-  summarise(n = sum(count))
-
-tab_date_region_age_999 %>%
-  ggplot(aes(x = date, y = n, fill = age)) +
-  geom_col(position = "stack") +
-  scale_fill_manual(values = blue_pal) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 90, hjust = 1)) +
-  guides(fill = guide_legend(title = "age", ncol = 3)) +
-  labs(title = "COVID-19 related 999 calls\nby age and region over time",
-       x = NULL,
-       y = "Number of 999 calls by age") +
-  facet_wrap(~ nhs_region, ncol = 4)
-
-
-tab_date_region_age_999 <- tab_date_region_age_999 %>%
-  group_by(date, nhs_region) %>%
-  summarise(tot = sum(n)) %>%
-  left_join(tab_date_region_age_999, by = c("date", "nhs_region")) %>%
-  mutate(prop_n = n/tot)
-
-tab_date_region_age_999 %>%
-  ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = blue_pal) +
-  geom_line() +
-  geom_point() +
-  geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 90, hjust = 1)) +
-  guides(color = guide_legend(title = "age", ncol = 3)) +
-  labs(title = "Proportion of COVID-19 related 999 calls\nby age and region over time",
-       x = NULL,
-       y = "Proportion of 999 calls by age") +
-  facet_wrap(~ nhs_region, ncol = 4)
-
-
-```
-
-## Statistical model
-
-We fit quasi-Poisson GLMs to each NHS regions, using orthogonal polynomials of
-time to check if there are strongly non-linear trends. Constant (linear function
-of time) growth rates are estimated as well as halving/doubling times.
-
-```{r model_999}
-
-## make data for model
-x_model_999 <- x %>%
-  filter(!is.na(nhs_region),
-         site_type == "999",
-         date >= (database_date - 21)) %>% 
-  group_by(date, nhs_region) %>%
-  summarise(n = sum(count))
-
-## add 'day' for convenience
-first_date <- min(x_model_999$date)
-last_date <-  max(x_model_999$date)
-x_model_999 <- x_model_999 %>%
-  mutate(day = as.integer(date - first_date)) %>% 
-  day_of_week()
-
-
-
-## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
-            data = x_model_999,
-            family = "quasipoisson"))
-
-## get linear model
-model_999 <- glm(n ~ day * nhs_region + day_of_week,
-                 data = x_model_999,
-                 family = "quasipoisson")
-summary(model_999)
-Rsq(model_999)
-
-```
-
-
-We get the coefficients and 95% confidence intervals, and display results;
-halving times are not plotted if the confidence interval of the corresponding
-growth rate includes 0.
-
-
-```{r r_999}
-
-r_999 <- get_r(model_999)
-
-## plot growth rates
-r_999 %>%
-  ggplot(aes(x = nhs_region, y = r)) +
-  geom_errorbar(aes(ymin = lower_95, ymax = upper_95)) +
-  geom_point() +
-  coord_flip() +
-  geom_hline(aes(yintercept = 0), linetype = 2) +
-  theme_bw() +
-  large_txt +
-  labs(x = "",
-       y = "Estimated growth rate",
-       title = "Growth rates in 999 calls (last 3 weeks)")
-
-
-## plot halving times
-r_999 %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = nhs_region, y = halving_t)) +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_point() +
-  coord_flip() +
-  theme_bw() +
-  large_txt +
-  ylim(c(0, 80)) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 999 calls (last 3 weeks)",
-       subtitle = "upper bounds > 80 days not shown")
-
-
-## table
-r_999 %>%
-  mutate_at(vars(r:upper_95), .funs = function(x) round(x, 2)) %>%
-  mutate_at(vars(contains("halving")), .funs = round) %>%
-  dt_tab()
-
-```
-
-
-
-
-
-
-
-# 111 COVID-19 online reports {.tabset .tabset-fade .tabset-pills}
-
-## Outline
-
-We look for spatio-temporal patterns in COVID-19 related 111 online reports. Analyses are
-broken down by NHS region. We also look for estimates of recent growth rate and
-associated doubling / halving time.
-
-
-## Regional breakdown
-
-```{r tab_regions_111_online}
-
-tab_regions_111_online <- x %>%
-  filter(site_type == "111_online") %>% 
-  group_by(nhs_region) %>%
-  summarise(n = sum(count))
-
-tab_regions_111_online %>%
-  ggplot(aes(x = nhs_region, y = n)) +
-  geom_col() +
-  theme_bw() +
-  large_txt +
-  coord_flip() +
-  labs(x = "",
-       y = "Total number of reports",
-       title = "Total 111 online reports by region")
-
-tab_regions_111_online %>%
-  adorn_totals() %>% 
-  dt_tab()
-
-```
-
-
-
-## By region over time
-
-```{r 111_online_volume, fig.height = 6}
-
-tab_date_region_111_online <- x %>%
-  filter(!is.na(nhs_region),
-         site_type == "111_online") %>%
-  group_by(date, nhs_region) %>%
-  summarise(n = sum(count))
-
-tab_date_region_111_online %>%
-  ggplot(aes(x = date, y = n, color = nhs_region)) +
-  geom_line() +
-  geom_point() +
-  geom_smooth(method = "loess", span = .5, color = "black") +
-  theme_bw() +
-  large_txt +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  rotate_x + 
-  guides(color = guide_legend(title = "", ncol = 3)) +
-  labs(title = "COVID-19 related 111 online reports over time",
-       x = NULL,
-       y = "Number of 111 online reports") +
-  scale_colour_manual(values = pal)
-
-tab_date_region_111_online %>% 
-  adorn_totals() %>%
-  spread(nhs_region, n, fill = 0, drop = FALSE) %>%
-  adorn_totals(c("row", "col")) %>% 
-  dt_tab()
-
-```
-
-
-## By region by age over time
-
-We plot the number of 111 online reports by age, and the proportion of 111 
-online reports by age.
-In the second graph, the vertical lines indicate the proportion of individuals 
-residing in the corresponding NHS region who belong to the corresponding age group. 
-
-```{r 111_online_volume_age, fig.height = 6}
-
-tab_date_region_age_111_online <- x %>%
-  filter(!is.na(nhs_region),
-         age != "missing",
-         site_type == "111_online") %>%
-  group_by(date, nhs_region, age) %>%
-  summarise(n = sum(count))
-
-tab_date_region_age_111_online %>%
-  ggplot(aes(x = date, y = n, fill = age)) +
-  geom_col(position = "stack") +
-  scale_fill_manual(values = blue_pal) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 90, hjust = 1)) +
-  guides(fill = guide_legend(title = "age", ncol = 3)) +
-  labs(title = "COVID-19 related 111 online reports\nby age and region over time",
-       x = NULL,
-       y = "Number of 111 online reports by age") +
-  facet_wrap(~ nhs_region, ncol = 4)
-
-
-tab_date_region_age_111_online <- tab_date_region_age_111_online %>%
-  group_by(date, nhs_region) %>%
-  summarise(tot = sum(n)) %>%
-  left_join(tab_date_region_age_111_online, by = c("date", "nhs_region")) %>%
-  mutate(prop_n = n/tot)
-
-tab_date_region_age_111_online %>%
-  ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = blue_pal) +
-  geom_line() +
-  geom_point() +
-  geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle = 90, hjust = 1)) +
-  guides(color = guide_legend(title = "age", ncol = 3)) +
-  labs(title = "Proportion of COVID-19 related 111 online reports\nby age and region over time",
-       x = NULL,
-       y = "Proportion of 111 online reports by age") +
-  facet_wrap(~ nhs_region, ncol = 4)
-
-
-```
-
-## Statistical model
-
-We fit quasi-Poisson GLMs to each NHS regions, using orthogonal polynomials of
-time to check if there are strongly non-linear trends. Constant (linear function
-of time) growth rates are estimated as well as halving/doubling times.
-
-```{r model_111_online}
-
-## make data for model
-x_model_111_online <- x %>%
-  filter(!is.na(nhs_region),
-         site_type == "111_online",
-         date >= (database_date - 21)) %>% 
-  group_by(date, nhs_region) %>%
-  summarise(n = sum(count))
-
-## add 'day' for convenience
-first_date <- min(x_model_111_online$date)
-last_date <-  max(x_model_111_online$date)
-x_model_111_online <- x_model_111_online %>%
-  mutate(day = as.integer(date - first_date)) %>% 
-  day_of_week()
-
-
-
-## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
-            data = x_model_111_online,
-            family = "quasipoisson"))
-
-## get linear model
-model_111_online <- glm(n ~ day * nhs_region + day_of_week,
-                 data = x_model_111_online,
-                 family = "quasipoisson")
-summary(model_111_online)
-Rsq(model_111_online)
-
-```
-
-
-We get the coefficients and 95% confidence intervals, and display results;
-halving times are not plotted if the confidence interval of the corresponding
-growth rate includes 0.
-
-
-```{r r_111_online}
-
-r_111_online <- get_r(model_111_online)
-
-## plot growth rates
-r_111_online %>%
-  ggplot(aes(x = nhs_region, y = r)) +
-  geom_errorbar(aes(ymin = lower_95, ymax = upper_95)) +
-  geom_point() +
-  coord_flip() +
-  geom_hline(aes(yintercept = 0), linetype = 2) +
-  theme_bw() +
-  large_txt +
-  labs(x = "",
-       y = "Estimated growth rate",
-       title = "Growth rates in 111 online reports\n(last 3 weeks)")
-
-
-## plot halving times
-r_111_online %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = nhs_region, y = halving_t)) +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_point() +
-  coord_flip() +
-  theme_bw() +
-  large_txt +
-  ylim(c(0, 80)) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 111 online reports\n(last 3 weeks)",
-       subtitle = "upper bounds > 80 days not shown")
-
-
-## table
-r_111_online %>%
-  mutate_at(vars(r:upper_95), .funs = function(x) round(x, 2)) %>%
-  mutate_at(vars(contains("halving")), .funs = round) %>%
-  dt_tab()
-
-```
-
-
-
-
-
-
-<!-- ======================================================== -->
-<!-- ======================================================== -->
-<!-- ======================================================== -->
-
-# All COVID-19 calls and online reports {.tabset .tabset-fade .tabset-pills}
+# Spatio-temporal trends in NHS Pathways reports {.tabset .tabset-fade .tabset-pills}
 
 ## Outline
 
@@ -960,34 +283,7 @@ We look for spatio-temporal patterns in COVID-19 related 111/999 calls and 111
 online reports. Analyses are broken down by NHS region. We also look for estimates
 of recent growth rate and associated doubling / halving time.
 
-
-## Regional breakdown
-
-```{r tab_regions_all}
-
-tab_regions_all <- x %>%
-  group_by(nhs_region) %>%
-  summarise(n = sum(count))
-
-tab_regions_all %>%
-  ggplot(aes(x = nhs_region, y = n)) +
-  geom_col() +
-  theme_bw() +
-  large_txt +
-  coord_flip() +
-  labs(x = "",
-       y = "Total number of calls/reports",
-       title = "Total 111/999 calls and\n111 online reports by region")
-
-tab_regions_all %>%
-  adorn_totals() %>% 
-  dt_tab()
-
-```
-
-
-
-## By region over time
+## Reports by region over time
 
 ```{r all_volume, fig.height = 6}
 
@@ -1023,7 +319,7 @@ tab_date_region_all %>%
 ```
 
 
-## By region by age over time
+## Reports by region by age over time
 
 We plot the number of 111/999 calls and 111 online reports by age, and the 
 proportion of 111/999 calls and 111 online reports by age.
@@ -1076,92 +372,6 @@ tab_date_region_age_all %>%
        x = NULL,
        y = "Proportion of daily reports by age") +
   facet_wrap(~ nhs_region, ncol = 4)
-```
-
-
-## Statistical model
-
-We fit quasi-Poisson GLMs to each NHS regions, using orthogonal polynomials of
-time to check if there are strongly non-linear trends. Constant (linear function
-of time) growth rates are estimated as well as halving/doubling times.
-
-```{r model_all}
-
-## make data for model
-x_model_all <- x %>%
-  filter(!is.na(nhs_region),
-         date >= (database_date - 21)) %>% 
-  group_by(date, nhs_region) %>%
-  summarise(n = sum(count))
-
-## add 'day' for convenience
-first_date <- min(x_model_all$date)
-last_date <-  max(x_model_all$date)
-x_model_all <- x_model_all %>%
-  mutate(day = as.integer(date - first_date)) %>% 
-  day_of_week()
-
-
-
-## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
-            data = x_model_all,
-            family = "quasipoisson"))
-
-## get linear model
-model_all <- glm(n ~ day * nhs_region + day_of_week,
-                 data = x_model_all,
-                 family = "quasipoisson")
-summary(model_all)
-Rsq(model_all)
-
-```
-
-
-We get the coefficients and 95% confidence intervals, and display results;
-halving times are not plotted if the confidence interval of the corresponding
-growth rate includes 0.
-
-
-```{r r_all}
-
-r_all <- get_r(model_all)
-
-## plot growth rates
-r_all %>%
-  ggplot(aes(x = nhs_region, y = r)) +
-  geom_errorbar(aes(ymin = lower_95, ymax = upper_95)) +
-  geom_point() +
-  coord_flip() +
-  geom_hline(aes(yintercept = 0), linetype = 2) +
-  theme_bw() +
-  large_txt +
-  labs(x = "",
-       y = "Estimated growth rate",
-       title = "Growth rates in 111/999 calls and\n111 online reports (last 3 weeks)")
-
-
-## plot halving times
-r_all %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = nhs_region, y = halving_t)) +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_point() +
-  coord_flip() +
-  theme_bw() +
-  large_txt +
-  ylim(c(0, 80)) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 111/999 calls and\n111 online reports (last 3 weeks)",
-       subtitle = "upper bounds > 80 days not shown")
-
-## table
-r_all %>%
-  mutate_at(vars(r:upper_95), .funs = function(x) round(x, 2)) %>%
-  mutate_at(vars(contains("halving")), .funs = round) %>%
-  dt_tab()
-
 ```
 
 
@@ -1319,37 +529,14 @@ r_R %>%
 ```
 
 
-We examine the evolution of the doubling time by region over time; halving times 
-are not plotted if the confidence interval of the corresponding growth rate includes 0. 
 
-```{r all_sliding_halving}
+## Moving window model - stratified by age
 
-r_all_sliding %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = w_max, y = halving_t, colour = nhs_region)) +
-  # geom_ribbon(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95, fill = nhs_region), alpha = 0.3) +
-  geom_line() +
-  geom_point() +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_segment(data = filter(r_all_sliding, halving_t_upper_95 > 30), aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
-  ylim(c(0, 30)) +
-  #facet_wrap(~nhs_region) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 111/999 calls and 111 online reports",
-       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown") +
-  scale_colour_manual(values = pal)
+We repeat the above analysis, where we fit quasi-Poisson GLMs for 14-day windows 
+to get growth rates over time, but apply this to each age group separately (0-18,
+19-69, 70-120 years old).
 
-```
-
-## Moving window model (0 to 18 years old)
-
-We fit quasi-Poisson GLMs for 14-day windows to get growth rates over time. This
-model is applied to the 0-18 years age group only.
+We first run the analysis for 0-18 years old.
 
 ```{r sliding_model_0_18}
 ## set moving time window (2 weeks)
@@ -1407,10 +594,6 @@ r_all_sliding_0_18 <- r_all_sliding_0_18 %>%
 
 ```
 
-
-We examine the evolution of the growth rate by region over time, for the 0-18 
-years age group only.
-
 ```{r all_sliding_growth_0_18}
 # plot
 plot_growth <-
@@ -1431,9 +614,6 @@ r_all_sliding_0_18 %>%
   scale_colour_manual(values = pal)
 
 ```
-
-From the growth rate, we derive R and examine its value through time, for the 0-18 
-years age group only.
 
 ```{r all_sliding_R_0_18}
 # plot
@@ -1495,40 +675,7 @@ fig2_3_0_18 <- r_R %>%
 
 ```
 
-
-We examine the evolution of the doubling time by region over time, for the 0-18 
-years age group only; halving times are not plotted if the confidence interval of the 
-corresponding growth rate includes 0. 
-
-```{r all_sliding_halving_0_18}
-
-r_all_sliding_0_18 %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = w_max, y = halving_t, colour = nhs_region)) +
-  geom_line() +
-  geom_point() +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_segment(data = filter(r_all_sliding_0_18, halving_t_upper_95 > 30),
-               aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
-  ylim(c(0, 30)) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 111/999 calls and 111 online reports\nfor 0-18 years old",
-       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown")+
-  scale_colour_manual(values = pal)
-
-```
-
-
-
-## Moving window model (19 to 69 years old)
-
-We fit quasi-Poisson GLMs for 14-day windows to get growth rates over time. This
-model is applied to the 16-69 years age group only.
+Then, we run the analysis for 19-69 years old.
 
 ```{r sliding_model_19_69}
 ## set moving time window (2 weeks)
@@ -1586,10 +733,6 @@ r_all_sliding_19_69 <- r_all_sliding_19_69 %>%
 
 ```
 
-
-We examine the evolution of the growth rate by region over time, for the 16-69 
-years age group only.
-
 ```{r all_sliding_growth_19_69}
 # plot
 plot_growth <-
@@ -1609,9 +752,6 @@ r_all_sliding_19_69 %>%
   scale_colour_manual(values = pal)
 
 ```
-
-From the growth rate, we derive R and examine its value through time, for the 16-69 
-years age group only.
 
 ```{r all_sliding_R_19_69}
 # plot
@@ -1674,42 +814,7 @@ fig2_3_19_69 <- r_R %>%
   
 ```
 
-
-We examine the evolution of the doubling time by region over time, for the 16-69 
-years age group only; halving times are not plotted if the confidence interval 
-of the corresponding growth rate includes 0. 
-
-```{r all_sliding_halving_19_69}
-
-r_all_sliding_19_69 %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = w_max, y = halving_t, colour = nhs_region)) +
-  geom_line() +
-  geom_point() +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_segment(data = filter(r_all_sliding_19_69, halving_t_upper_95 > 30),
-               aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
-  ylim(c(0, 30)) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 111/999 calls and 111 online reports\nfor 19-69 years old",
-       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown") +
-  scale_colour_manual(values = pal)
-
-```
-
-
-
-
-
-## Moving window model (70 to 120 years old)
-
-We fit quasi-Poisson GLMs for 14-day windows to get growth rates over time. This
-model is applied to the 70-120 years age group only.
+Finally, we run the analysis for 70-120 years old.
 
 ```{r sliding_model_70_120}
 ## set moving time window (2 weeks)
@@ -1767,10 +872,6 @@ r_all_sliding_70_120 <- r_all_sliding_70_120 %>%
 
 ```
 
-
-We examine the evolution of the growth rate by region over time, for the 70-120 
-years age group only.
-
 ```{r all_sliding_growth_70_120}
 # plot
 plot_growth <-
@@ -1791,9 +892,6 @@ r_all_sliding_70_120 %>%
   scale_colour_manual(values = pal)
 
 ```
-
-From the growth rate, we derive R and examine its value through time, for the 
-70-120 years age group only.
 
 ```{r all_sliding_R_70_120}
 # plot
@@ -1854,37 +952,8 @@ fig2_3_70_120 <- r_R %>%
   
 ```
 
-
-We examine the evolution of the doubling time by region over time, for the 
-70-120 years age group only; halving times are not plotted if the confidence 
-interval of the corresponding growth rate includes 0. 
-
-```{r all_sliding_halving_70_120}
-
-r_all_sliding_70_120 %>%
-  filter(!is.na(halving_t)) %>% 
-  ggplot(aes(x = w_max, y = halving_t, colour = nhs_region)) +
-  geom_line() +
-  geom_point() +
-  geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_segment(data = filter(r_all_sliding_70_120, halving_t_upper_95 > 30),
-               aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
-  ylim(c(0, 30)) +
-  #facet_wrap(~nhs_region) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
-  labs(x = "",
-       y = "Halving time (in days)",
-       title = "Halving times of 111/999 calls and 111 online reports\nfor 70-120 years old",
-       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown")+
-  scale_colour_manual(values = pal)
-
-```
-
-
-## Combine all age plots in a single plot
+We combine the estimated growth rates and effective reproduction numbers into
+a single figure.
 
 ```{r fig_2_3_all_ages, fig.height = 12}
 
@@ -1907,88 +976,16 @@ ggpubr::ggarrange(fig2_3_0_18,
 <!-- ======================================================= -->
 
 
-# Compare with death time series {.tabset .tabset-fade .tabset-pills}
+# Comparison with deaths time series {.tabset .tabset-fade .tabset-pills}
 
 ## Outline
 
-We want to explore the correlation between 111/999 reports and deaths, and
+We want to explore the correlation between NHS Pathways reports and deaths, and
 assess the potential for reports to be used as an early warning system for
 disease resurgence.
 
-Death data are publically available. Will need to truncate the time series to
+Death data are publically available. We truncate the time series to
 avoid bias from reporting delay - we assume a conservative delay of three weeks.
-
-
-
-## Deaths over time
-
-```{r dth_ts_plot}
-
-delay_max <- 21
-
-ggplot(dth, aes(date_report, deaths, colour = nhs_region)) +
-  geom_point() +
-  geom_line() +
-  geom_smooth(method = "loess", span = .5, color = "black") +
-  theme_bw() +
-  large_txt +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  rotate_x + 
-  guides(color = guide_legend(title = "", ncol = 3)) +
-  labs(
-    # title = "COVID-19 related 111/999 calls and\n111 online reports over time",
-       x = NULL,
-       y = "Number of deaths reported")+
-  geom_vline(aes(xintercept = max(dth$date_report)-delay_max), col = "darkgrey", lty = "longdash") +
-  scale_colour_manual(values = pal)
-
-```
-
-Shift death time series back to try to align peaks.
-
-```{r dth_ts_lag}
-
-l <- 14
-lab <- paste0("Deaths lagged by ", l, " days")
-
-trunc_date <- max(dth$date_report) - delay_max
-
-dth_lag <- dth %>% 
-  filter(date_report <= trunc_date) %>% # truncate for reporting delay
-  mutate(plot_date = date_report - l, count = deaths,  measure = "Deaths") #region = nhs_region,
-x_plot <- mutate(x, plot_date = date) %>%
-  filter(!is.na(nhs_region)) %>%
-  group_by(plot_date, nhs_region) %>%
-  summarise(count = sum(count, na.rm = T)) %>%
-  ungroup %>%
-  mutate(measure = "Reports")
-
-tot <- bind_rows(x_plot, dth_lag)
-
-plot_lag <- 
-ggplot(x_plot, aes(x = plot_date, y = count)) +
-  geom_point(aes(colour = nhs_region), alpha = 0.2) +
-  geom_line(aes(colour = nhs_region),alpha = 0.2) +
-  geom_point(data = dth_lag, aes(y = count*1e2, colour = nhs_region)) +
-  geom_line(data = dth_lag, aes(y = count*1e2, colour = nhs_region)) +
-  geom_text(x = trunc_date-l+12, y = 25000, label = lab, size = 3) +
-  geom_text(x = min(x_plot$plot_date) - 8, y = 25000, label = "Reports", col = "darkgrey",size = 3) +
-  scale_y_continuous(sec.axis = sec_axis(~./1e2, name = "Number of daily deaths reported")) +
-  theme_bw() +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  rotate_x + 
-  guides(color = guide_legend(title = "", ncol = 3)) +
-  labs(
-       title = "111/999 reports and lagged reported deaths over time",
-       x = NULL,
-       y = "Number of daily reports")+
-  scale_colour_manual(values = pal)
-
-plot_lag
-```
-
 
 
 ## Lagged correlation
@@ -2002,6 +999,9 @@ First join the pathways and death data, and aggregate over all England:
 
 ```{r data_agg}
 ## truncate death data for reporting delay
+delay_max <- 21
+trunc_date <- max(dth$date_report) - delay_max
+
 dth_trunc <- dth %>%
   rename(date = date_report) %>%
   filter(date <= trunc_date) 
@@ -2092,7 +1092,7 @@ dth_vs_note <- all_tot %>%
   ggplot(aes(y = deaths, x = note_lag)) +
   geom_point() + 
   geom_smooth(color = "black",
-              method = "lm", formula = "y ~ x") +
+              method = "glm", formula = "y ~ x") +
   theme_bw() +
   labs(y = "Daily number of \ndeaths reported",
        x = "Daily number of NHS Pathways reports") +
@@ -2129,51 +1129,6 @@ ggplot(aes(lag, r, col = nhs_region)) +
 ```
 
 
-
-## Regress deaths on lagged reports
-
-```{r regress}
-
-all_tot <- all_tot %>%
-  rename(date_death = date) %>%
-  mutate(note_lag = lag(count, lag_cor$lag[l_opt]),
-         note_lag_c = (note_lag - mean(note_lag, na.rm = T)),
-         date_note = lag(date_death,16))
-
-lag_mod <- glm(deaths ~ note_lag, data = all_tot, family = "quasipoisson")
-null_mod <- glm(deaths ~ 1, data = all_tot[!is.na(all_tot$note_lag),], family = "quasipoisson")
-
-summary(lag_mod)
-# plot(lag_mod)
-
-exp(coefficients(lag_mod))
-
-# anova(null_mod, lag_mod, test = "Chisq")
-# 1 - (lag_mod$deviance/lag_mod$null.deviance)
-
-all_tot$fitted[!is.na(all_tot$note_lag)] <- fitted(lag_mod)
-
-obs_vs_pred <- all_tot %>% 
-    filter(!is.na(note_lag)) %>%
-  ggplot(aes(x = deaths, y = fitted)) +
-  geom_point() + 
-  geom_smooth(color = "black", 
-              method = "lm", formula = "y ~ x") +
-  geom_abline(slope = 1, col = "black", lty = "longdash") +
-  theme_bw() +
-  labs(y = "Predicted",
-       x = "Observed") +
-  large_txt
-obs_vs_pred
-
-```
-
-
-
-
-<!-- =======================================================  -->
-<!-- =======================================================  -->
-<!-- ======================================================= -->
 
 # Supplementary figures {.tabset .tabset-fade .tabset-pills}
 
@@ -2214,10 +1169,8 @@ ggpubr::ggarrange(SI_dist1,
 
 ## Sensitivity analysis - 7 or 21 days moving window
 
-We repoduce the window analysis with either a 7 or 21 days window for sensitivity
+We reproduce the window analysis with either a 7 or 21 days window for sensitivity
 purposes.
-
-First, with 7 days:
 
 ```{r sliding_model_7}
 ## set moving time window (1/2/3 weeks)
@@ -2352,9 +1305,6 @@ r_R_7 <- r_R %>%
 
   
 ```
-
-
-For 21 days:
 
 ```{r sliding_model_21}
 ## set moving time window (1/2/3 weeks)
@@ -2520,7 +1470,7 @@ if (!dir.exists("excel_tables")) {
 
 
 ## list all tables, and loop over export
-tables_to_export <- c("r_111", "r_999", "r_111_online", "r_all", "r_all_sliding")
+tables_to_export <- c("r_all_sliding")
 
 for (e in tables_to_export) {
   rio::export(get(e),
