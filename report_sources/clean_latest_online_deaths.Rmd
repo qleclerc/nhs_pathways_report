@@ -1,0 +1,301 @@
+---
+title: "COVID19 real-time analysis: NHS online death data importing & cleaning"
+author: "Quentin J. Leclerc"
+date: "`r format(Sys.time(), '%A %d %B %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn
+    number_sections: yes
+    theme: spacelab
+    toc: yes
+    toc_collapse: no
+    toc_depth: 4
+    toc_float: yes
+    css: !expr here::here('css', 'style.css')
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      collapse = TRUE,
+                      fig.width = 8,
+                      fig.height = 6,
+                      dpi = 150,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Data preparation {.tabset .tabset-fade .tabset-pills}
+
+## Outline
+
+
+* **Load scripts**: loads libraries and useful scripts used in the analyses; all
+`.R` files contained in `scripts` at the root of the factory are automatically
+loaded
+
+* **Load data**: imports datasets, and may contain some *ad hoc* changes to the
+data such as specific data cleaning (not used in other reports), new variables
+used in the analyses, etc.
+
+
+
+## Load packages
+
+```{r libraries}
+
+library(reportfactory)
+library(here)
+library(tidyverse)
+library(linelist)
+library(xml2)
+library(rvest)
+library(reshape2)
+
+```
+
+
+
+## Load scripts
+
+These scripts will load:
+
+* all local scripts, stored as `.R` filesinside `/scripts/`
+* all global scripts, i.e. stored outside the factory in `../scripts/`
+
+```{r load_scripts}
+
+rfh_load_scripts()
+
+```
+
+
+
+
+
+## Load data
+
+The latest NHS online deaths data is automatically detected using
+`fetch_url_online_deaths()`. We also recover the date from the url:
+
+```{r load_data}
+
+#fetch the latest data
+current_online_deaths <- fetch_url_online_deaths() 
+
+#get the date of the latest data
+online_deaths_date <- linelist::guess_dates(current_online_deaths) - 1
+
+```
+
+We load the data:
+
+```{r online_deaths_import}
+
+#import the data
+online_deaths_raw <- rio::import(current_online_deaths,
+                                 sheet = "COVID19 total deaths by region",
+                                 skip = 14,
+                                 guess_max = 1e5)
+
+```
+
+The **completion date** of the NHS online deaths data is
+**`r format(online_deaths_date, format = "%A %d %b %Y")`**.
+
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Process data {.tabset .tabset-fade .tabset-pills}
+
+## Clean data
+
+We first clean the data:
+
+```{r clean_data}
+
+#transpose the dataset to have deaths by regions as columns
+online_deaths <- data.frame(t(online_deaths_raw[,-(1:3)]), row.names = NULL)
+colnames(online_deaths) <- online_deaths_raw[,1]  
+
+#clean dataset
+online_deaths <- online_deaths %>%
+  linelist::clean_data(wordlists = cleaning_rules,
+                       guess_dates = FALSE) %>%
+  rename(date_report = nhs_england_region) %>%
+  mutate(date_report = guess_dates(date_report, error_tolerance = 1)) %>%
+  filter(!is.na(date_report)) %>%
+  select(-england)
+
+head(online_deaths)
+
+```
+
+
+## Melt data
+
+We then melt the data to have an `nhs_region` variable:
+
+```{r melt_data}
+
+#melt to have an nhs_region variable instead of multiple columns
+online_deaths <- melt(online_deaths, id.vars = "date_report",
+                      value.name = "deaths", variable.name = "nhs_region") %>%
+  mutate(deaths = as.numeric(deaths))
+
+head(online_deaths)
+
+```
+
+
+
+## Add timestamp
+
+Add dataset version date as an attribute for later reference.
+
+```{r add_timestamp}
+
+attr(online_deaths, "timestamp") <- online_deaths_date
+
+```
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+# Export data {.tabset .tabset-fade .tabset-pills}
+
+## R objects
+
+We export the clear database, placed in `produced_rds/` as well as in
+`data/rds`:
+
+```{r export_rds}
+
+## check if a directory exists and if not then creates it
+if (!dir.exists("produced_rds")) {
+  dir.create("produced_rds")
+}
+
+## create the text for the file name with the database date
+rds_file_name <- sprintf("deaths_%s.rds",
+                         format(online_deaths_date, "%Y-%m-%d"))
+rds_file_name
+
+## save the rds file in the produced_rds folder
+saveRDS(online_deaths,
+        file.path("produced_rds", rds_file_name))
+```
+
+We copy these files to the `data/rds` folder:
+
+```{r copy_rds}
+## copy some files into `data/rds`
+
+## provide the destination of where to copy the data
+destination <- here("data",
+                    "rds",
+                    rds_file_name)
+## copy the rds data
+file.copy(from = file.path("produced_rds", rds_file_name),
+          to = destination,
+          overwrite = TRUE)
+
+## copy to the generic 'latest' data file
+destination <- here("data",
+                    "rds",
+                    "deaths_latest.rds")
+file.copy(from = file.path("produced_rds", rds_file_name),
+          to = destination,
+          overwrite = TRUE)
+
+```
+
+
+
+
+## Update the `current_deaths.R` script
+
+```{r update_script}
+
+## path to the output file 
+script_destination <- here::here("scripts",
+                                 "current_deaths.R")
+
+## comments to say when this was updated
+txt <- paste("## This file is generated automatically by `clean_latest_online_deaths`",
+             "## Do not edit it by hand!\n",
+             sep = "\n")
+cat(txt, file = script_destination, append = FALSE)
+
+txt <- sprintf("\n## This file was last updated on the: %s\n",
+               Sys.time())
+cat(txt, file = script_destination, append = TRUE)
+
+## actual content of the script
+txt <- sprintf('\ncurrent_deaths <- here::here("data",
+                                 "rds",
+                                 "%s")',
+               rds_file_name)
+cat(txt, file = script_destination, append = TRUE)
+
+```
+
+
+
+
+
+
+
+<!-- =======================================================  -->
+<!-- =======================================================  -->
+<!-- ======================================================= -->
+
+# System information {.tabset .tabset-fade .tabset-pills}
+
+## Outline
+
+The following information documents the system on which the document was
+compiled.
+
+
+## System 
+
+This provides information on the operating system.
+
+```{r system_info}
+Sys.info()
+```
+
+## R environment
+
+This provides information on the version of R used:
+
+```{r R_session}
+R.version
+```
+
+
+## R packages
+
+This provides information on the packages used:
+
+```{r R_pkg}
+sessionInfo()
+```

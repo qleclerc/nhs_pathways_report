@@ -1,6 +1,6 @@
 ---
 title: "COVID19 real-time analysis: NHS Pathways data importing & cleaning"
-author: "Quentin Leclerc"
+author: "Quentin J. Leclerc, Thibaut Jombart"
 date: "`r format(Sys.time(), '%A %d %B %Y')`"
 output:
   html_document:
@@ -128,8 +128,8 @@ We first clean the data:
 ```{r clean_data_calls}
 
 pathways_calls <- linelist::clean_data(pathways_calls,
-                                wordlists = cleaning_rules,
-                                guess_dates = FALSE)
+                                       wordlists = cleaning_rules,
+                                       guess_dates = FALSE)
 pathways_calls$call_date <- linelist::guess_dates(pathways_calls$call_date, error_tolerance = 1)
 head(pathways_calls)
 
@@ -138,8 +138,8 @@ head(pathways_calls)
 ```{r clean_data_online}
 
 pathways_online <- linelist::clean_data(pathways_online,
-                                wordlists = cleaning_rules,
-                                guess_dates = FALSE)
+                                        wordlists = cleaning_rules,
+                                        guess_dates = FALSE)
 pathways_online$journeydate <- linelist::guess_dates(pathways_online$journeydate, error_tolerance = 1)
 head(pathways_calls)
 
@@ -204,13 +204,16 @@ We also add NHS regions to the data:
 
 ```{r add_nhs}
 
-ccg_info <- import_ccg_info() %>%
+ccg_info <- rio::import(here::here("data", "csv", "ccg_info_april_2020.csv"))
+
+ccg_info <- ccg_info %>%
   as_tibble() %>%
   clean_data()
+
 head(ccg_info)
 
 pathways_all <- left_join(pathways_all,
-                     rename(ccg_info, ccg_name = name))
+                          rename(ccg_info, ccg_name = name))
 head(pathways_all)
 
 ```
@@ -249,8 +252,7 @@ if (!dir.exists("produced_rds")) {
 }
 
 ## create the text for the file name with the database date
-rds_file_name <- sprintf("%sclear_%s.rds",
-                         "pathways_",
+rds_file_name <- sprintf("pathways_%s.rds",
                          format(pathways_calls_date, "%Y-%m-%d"))
 rds_file_name
 
@@ -276,7 +278,7 @@ file.copy(from = file.path("produced_rds", rds_file_name),
 ## copy to the generic 'latest' data file
 destination <- here("data",
                     "rds",
-                    "pathways_clear_latest.rds")
+                    "pathways_latest.rds")
 file.copy(from = file.path("produced_rds", rds_file_name),
           to = destination,
           overwrite = TRUE)

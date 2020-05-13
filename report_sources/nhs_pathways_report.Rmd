@@ -1,9 +1,9 @@
 ---
 title: "Analysis of spatio-temporal trends in potential COVID-19 cases reported through NHS Pathways"
-author: "Quentin J. Leclerc, Emily S. Nightingale, CMMID COVID-19 Working Group, Thibaut Jombart"
+author: "Quentin J. Leclerc, Emily S. Nightingale, Samuel Abbott, CMMID COVID-19 Working Group, Thibaut Jombart"
 date: "`r format(Sys.time(), '%A %d %B %Y')`"
 output:
-  word_document
+  bookdown::pdf_document2
 header-includes:
  \usepackage{xcolor}
  \usepackage{float}

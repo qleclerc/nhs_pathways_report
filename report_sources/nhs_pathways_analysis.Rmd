@@ -1,6 +1,6 @@
 ---
 title: "Analysis of 111/999 NHS calls and 111 online reports"
-author: "Thibaut Jombart, Quentin Leclerc & Isabel Fletcher for CMMID"
+author: "Quentin Leclerc, Emily Nightingale, Samuel Abbott &  for CMMID"
 date: "`r format(Sys.time(), '%A %d %B %Y')`"
 output:
   html_document:
@@ -53,7 +53,7 @@ used in the analyses, etc.
 
 library(reportfactory)
 library(here)
-library(rio)
+library(rio) 
 library(tidyverse)
 library(incidence)
 library(distcrete)
@@ -67,6 +67,8 @@ library(kableExtra)
 library(DT)
 library(cyphr)
 library(chngpt)
+library(lubridate)
+library(ggpubr)
 
 ```
 
@@ -84,7 +86,17 @@ These scripts also contain routines to access the latest clean encrypted data
 
 ```{r load_scripts}
 
-rfh_load_scripts()
+## load all scripts without need for data key
+
+## note: this assumes `params` is either a list containing compilation
+## parameters, or does not exist
+
+if(exists("params") && is.list(params)) {
+  params$no_key <- TRUE
+} else {
+  params <- list(no_key = TRUE)
+}
+reportfactory::rfh_load_scripts()
 
 ```
 
@@ -99,7 +111,7 @@ We import the latest NHS pathways data:
 
 ```{r load_data}
 
-x <- import_pathways() %>%
+x <- import_clear_pathways() %>%
   as_tibble()
 x
 
@@ -113,13 +125,24 @@ path <- here::here("data", "csv", "nhs_region_population_2018.csv")
 nhs_region_pop <- rio::import(path) %>%
   mutate(nhs_region = str_to_title(gsub("_"," ",nhs_region)))
 
-nhs_region_pop$nhs_region[nhs_region_pop$nhs_region == "East Of England"] <- "East of England"
-nhs_region_pop$nhs_region[nhs_region_pop$nhs_region == "North East And Yorkshire"] <- "North East and Yorkshire"
-
+nhs_region_pop$nhs_region <- gsub(" Of ", " of ", nhs_region_pop$nhs_region)
+nhs_region_pop$nhs_region <- gsub(" And ", " and ", nhs_region_pop$nhs_region)
 nhs_region_pop
 
 ```
 
+Import publically available deaths per NHS region:
+
+```{r import_deaths}
+
+dth <- import_clear_online_deaths() %>%
+  mutate(nhs_region = str_to_title(gsub("_"," ",nhs_region)))
+
+dth$nhs_region <- gsub(" Of ", " of ", dth$nhs_region)
+dth$nhs_region <- gsub(" And ", " and ", dth$nhs_region)
+dth
+
+```
 
 ## Completion date
 
@@ -149,10 +172,10 @@ We add the following variable:
 
 x <- x %>% 
   mutate(nhs_region = str_to_title(gsub("_"," ",nhs_region)),
+         nhs_region = gsub(" Of ", " of ", nhs_region),
+         nhs_region = gsub(" And ", " and ", nhs_region),
          day = as.integer(date - min(date, na.rm = TRUE)))
 
-x$nhs_region[x$nhs_region == "East Of England"] <- "East of England"
-x$nhs_region[x$nhs_region == "North East And Yorkshire"] <- "North East and Yorkshire"
 ```
 
 
@@ -188,6 +211,7 @@ get_r <- function(model) {
   out <- data.frame(r = coef(model))  %>%
     rownames_to_column("var") %>% 
     cbind(confint(model)) %>%
+    filter(!grepl("day_of_week", var)) %>% 
     filter(grepl("day", var)) %>%
     rename(lower_95 = "2.5 %",
            upper_95 = "97.5 %") %>%
@@ -220,16 +244,39 @@ get_r <- function(model) {
 
 ```
 
+Function to classify the day of the week into *weekend*, *Monday*, and *the
+rest*:
 
-```{r palette}
+```{r day_of_week}
+
+## Fn to add day of week
+day_of_week <- function(df) {
+  df %>% 
+    dplyr::mutate(day_of_week = lubridate::wday(date, label = TRUE)) %>% 
+    dplyr::mutate(day_of_week = dplyr::case_when(
+      day_of_week %in% c("Sat", "Sun") ~ "weekend",
+      day_of_week %in% c("Mon") ~ "monday",
+      !(day_of_week %in% c("Sat", "Sun", "Mon")) ~ "rest_of_week"
+    ) %>% 
+      factor(levels = c("rest_of_week", "monday", "weekend")))
+}
+
+```
+
+Custom color palettes, color scales, and vectors of colors:
+
+```{r palettes}
 
 pal <- c("#006212",
-"#ae3cab",
-"#00db90",
-"#960c00",
-"#55aaff",
-"#ff7e78",
-"#00388d")
+         "#ae3cab",
+         "#00db90",
+         "#960c00",
+         "#55aaff",
+         "#ff7e78",
+         "#00388d")
+
+blue_pal <- c("#8cb5f5","#00a1bd","#004480")
+
 ```
 
 
@@ -289,7 +336,7 @@ tab_date_region_111 %>%
   ggplot(aes(x = date, y = n, color = nhs_region)) +
   geom_line() +
   geom_point() +
-  geom_smooth(color = "black") +
+  geom_smooth(method = "loess", span = .5, color = "black") +
   theme_bw() +
   large_txt +
   scale_weeks +
@@ -317,10 +364,6 @@ residing in the corresponding NHS region who belong to the corresponding age gro
 
 ```{r 111_volume_age, fig.height = 6}
 
-#custom palette, reused later!
-BluePalette = c("#88c5dc","#548cb5","#2b495c")
-
-
 tab_date_region_age_111 <- x %>%
   filter(!is.na(nhs_region),
          age != "missing",
@@ -331,7 +374,7 @@ tab_date_region_age_111 <- x %>%
 tab_date_region_age_111 %>%
   ggplot(aes(x = date, y = n, fill = age)) +
   geom_col(position = "stack") +
-  scale_fill_manual(values = BluePalette) +
+  scale_fill_manual(values = blue_pal) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
@@ -352,7 +395,7 @@ tab_date_region_age_111 <- tab_date_region_age_111 %>%
 
 tab_date_region_age_111 %>%
   ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = BluePalette) +
+  scale_color_manual(values = blue_pal) +
   geom_line() +
   geom_point() +
   geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
@@ -390,17 +433,18 @@ x_model_111 <- x %>%
 first_date <- min(x_model_111$date)
 last_date <-  max(x_model_111$date)
 x_model_111 <- x_model_111 %>%
-  mutate(day = as.integer(date - first_date))
+  mutate(day = as.integer(date - first_date)) %>% 
+  day_of_week()
 
 
 
 ## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region,
+summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
             data = x_model_111,
             family = "quasipoisson"))
 
 ## get linear model
-model_111 <- glm(n ~ day * nhs_region,
+model_111 <- glm(n ~ day * nhs_region + day_of_week,
                  data = x_model_111,
                  family = "quasipoisson")
 summary(model_111)
@@ -517,7 +561,7 @@ tab_date_region_999 %>%
   ggplot(aes(x = date, y = n, color = nhs_region)) +
   geom_line() +
   geom_point() +
-  geom_smooth(color = "black") +
+  geom_smooth(method = "loess", span = .5, color = "black") +
   theme_bw() +
   large_txt +
   scale_weeks +
@@ -555,7 +599,7 @@ tab_date_region_age_999 <- x %>%
 tab_date_region_age_999 %>%
   ggplot(aes(x = date, y = n, fill = age)) +
   geom_col(position = "stack") +
-  scale_fill_manual(values = BluePalette) +
+  scale_fill_manual(values = blue_pal) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
@@ -575,7 +619,7 @@ tab_date_region_age_999 <- tab_date_region_age_999 %>%
 
 tab_date_region_age_999 %>%
   ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = BluePalette) +
+  scale_color_manual(values = blue_pal) +
   geom_line() +
   geom_point() +
   geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
@@ -612,17 +656,18 @@ x_model_999 <- x %>%
 first_date <- min(x_model_999$date)
 last_date <-  max(x_model_999$date)
 x_model_999 <- x_model_999 %>%
-  mutate(day = as.integer(date - first_date))
+  mutate(day = as.integer(date - first_date)) %>% 
+  day_of_week()
 
 
 
 ## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region,
+summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
             data = x_model_999,
             family = "quasipoisson"))
 
 ## get linear model
-model_999 <- glm(n ~ day * nhs_region,
+model_999 <- glm(n ~ day * nhs_region + day_of_week,
                  data = x_model_999,
                  family = "quasipoisson")
 summary(model_999)
@@ -734,7 +779,7 @@ tab_date_region_111_online %>%
   ggplot(aes(x = date, y = n, color = nhs_region)) +
   geom_line() +
   geom_point() +
-  geom_smooth(color = "black") +
+  geom_smooth(method = "loess", span = .5, color = "black") +
   theme_bw() +
   large_txt +
   scale_weeks +
@@ -774,7 +819,7 @@ tab_date_region_age_111_online <- x %>%
 tab_date_region_age_111_online %>%
   ggplot(aes(x = date, y = n, fill = age)) +
   geom_col(position = "stack") +
-  scale_fill_manual(values = BluePalette) +
+  scale_fill_manual(values = blue_pal) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
@@ -794,7 +839,7 @@ tab_date_region_age_111_online <- tab_date_region_age_111_online %>%
 
 tab_date_region_age_111_online %>%
   ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = BluePalette) +
+  scale_color_manual(values = blue_pal) +
   geom_line() +
   geom_point() +
   geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
@@ -831,17 +876,18 @@ x_model_111_online <- x %>%
 first_date <- min(x_model_111_online$date)
 last_date <-  max(x_model_111_online$date)
 x_model_111_online <- x_model_111_online %>%
-  mutate(day = as.integer(date - first_date))
+  mutate(day = as.integer(date - first_date)) %>% 
+  day_of_week()
 
 
 
 ## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region,
+summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
             data = x_model_111_online,
             family = "quasipoisson"))
 
 ## get linear model
-model_111_online <- glm(n ~ day * nhs_region,
+model_111_online <- glm(n ~ day * nhs_region + day_of_week,
                  data = x_model_111_online,
                  family = "quasipoisson")
 summary(model_111_online)
@@ -954,7 +1000,8 @@ tab_date_region_all %>%
   ggplot(aes(x = date, y = n, color = nhs_region)) +
   geom_line() +
   geom_point() +
-  geom_smooth(color = "black") +
+  geom_smooth(method = "loess", span = .5, color = "black") +
+  geom_vline(xintercept = as.Date("2020-03-23"), linetype = "dashed") +
   theme_bw() +
   large_txt +
   scale_weeks +
@@ -964,7 +1011,7 @@ tab_date_region_all %>%
   labs(
     # title = "COVID-19 related 111/999 calls and\n111 online reports over time",
        x = NULL,
-       y = "Number of daily notifications")+
+       y = "Number of daily reports")+
   scale_colour_manual(values = pal)
 
 tab_date_region_all %>% 
@@ -994,15 +1041,15 @@ tab_date_region_age_all <- x %>%
 tab_date_region_age_all %>%
   ggplot(aes(x = date, y = n, fill = age)) +
   geom_col(position = "stack") +
-  scale_fill_manual(values = BluePalette) +
+  scale_fill_manual(values = blue_pal) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 90, hjust = 1)) +
   guides(fill = guide_legend(title = "Age", ncol = 3)) +
-  labs(title = "COVID-19 related 111/999 calls and 111 online reports\nby age and region over time",
+  labs(title = "",#"COVID-19 related 111/999 calls and 111 online reports\nby age and region over time",
        x = NULL,
-       y = "Total daily notifications by age") +
+       y = "Total daily reports by age") +
   facet_wrap(~ nhs_region, ncol = 4)
 
 
@@ -1014,7 +1061,7 @@ tab_date_region_age_all <- tab_date_region_age_all %>%
 
 tab_date_region_age_all %>%
   ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = BluePalette) +
+  scale_color_manual(values = blue_pal) +
   geom_line() +
   geom_point() +
   geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
@@ -1027,10 +1074,9 @@ tab_date_region_age_all %>%
     # title = "Proportion of COVID-19 related 111/999 calls and 111 online reports\nby age and region over time",
        # subtitle = "Horizontal lines indicate the total proportion of the regional population in each age group",
        x = NULL,
-       y = "Proportion of daily notifications by age") +
+       y = "Proportion of daily reports by age") +
   facet_wrap(~ nhs_region, ncol = 4)
 ```
-
 
 
 ## Statistical model
@@ -1052,17 +1098,18 @@ x_model_all <- x %>%
 first_date <- min(x_model_all$date)
 last_date <-  max(x_model_all$date)
 x_model_all <- x_model_all %>%
-  mutate(day = as.integer(date - first_date))
+  mutate(day = as.integer(date - first_date)) %>% 
+  day_of_week()
 
 
 
 ## check for non-linear components
-summary(glm(n ~ poly(day, 2) * nhs_region,
+summary(glm(n ~ poly(day, 2) * nhs_region + day_of_week,
             data = x_model_all,
             family = "quasipoisson"))
 
 ## get linear model
-model_all <- glm(n ~ day * nhs_region,
+model_all <- glm(n ~ day * nhs_region + day_of_week,
                  data = x_model_all,
                  family = "quasipoisson")
 summary(model_all)
@@ -1122,7 +1169,7 @@ r_all %>%
 
 We fit quasi-Poisson GLMs for 14-day windows to get growth rates over time.
 ```{r sliding_model}
-## set moving time window (2 weeks)
+## set moving time window (1/2/3 weeks)
 w <- 14
 
 # create empty df
@@ -1144,10 +1191,11 @@ for (i in 1:(length(unique_dates)-w)){
   
   model_data <- x_model_all_moving %>%
     filter(date >= date_i & date < date_i_max) %>%
-    mutate(day = as.integer(date - date_i))
+    mutate(day = as.integer(date - date_i)) %>% 
+    day_of_week()
   
   
-  mod <- glm(n ~ day * nhs_region,
+  mod <- glm(n ~ day * nhs_region + day_of_week,
              data = model_data,
              family = 'quasipoisson')
   
@@ -1165,7 +1213,8 @@ for (i in 1:(length(unique_dates)-w)){
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
-                                        scale = SI_param$scale, w = 0)
+                                        scale = SI_param$scale,
+                                        w = 0.5)
 
 #convert growth rates r to R0
 r_all_sliding <- r_all_sliding %>%
@@ -1193,27 +1242,10 @@ r_all_sliding %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (r)"
-       # title = "Growth rates in 111/999 calls and 111 online reports",
-       # subtitle = "Calculated based on data from the 14 days prior to each date"
-       )+
+       y = "Estimated daily growth rate (r)")+
   scale_colour_manual(values = pal)
-
-# r_all_sliding %>% 
-#   group_by(nhs_region) %>%
-#   slice(which.min(r)) %>%
-#   ggplot(aes(x = nhs_region, y = r)) +
-#   geom_errorbar(aes(ymin = lower_95, ymax = upper_95)) +
-#   geom_point() +
-#   coord_flip() +
-#   geom_hline(aes(yintercept = 0), linetype = 2) +
-#   theme_bw() +
-#   large_txt +
-#   labs(x = "",
-#        y = "Estimated growth rate",
-#        title = "Lowest growth rates in 111/999 calls\nand 111 online reports")
 
 ```
 
@@ -1228,13 +1260,11 @@ r_all_sliding %>%
   geom_line(aes(colour = nhs_region)) +
   geom_point(aes(colour = nhs_region)) +
   geom_hline(yintercept = 1, linetype = "dashed") +
-  # geom_errorbar(aes(ymin = R_lower_95, ymax = R_upper_95)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Estimated effective reproduction\nnumber (Re)"
        # title = "R estimates",
@@ -1265,8 +1295,6 @@ r_R %>%
   geom_line(aes(colour = nhs_region)) +
   geom_point(aes(colour = nhs_region)) +
   geom_hline(aes(yintercept = reference), linetype = "dashed") +
-  # geom_errorbar(aes(ymin = R_lower_95, ymax = R_upper_95)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
@@ -1275,14 +1303,17 @@ r_R %>%
         # strip.text.x = element_blank(),
         strip.placement = "outside"
         ) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
-  labs(x = "",
-       y = "" #Estimated reproduction\nnumber (R)
-       # title = "R estimates",
-       # subtitle = "Calculated based on data from the 14 days prior to each date"
-       )+
+  guides(color = guide_legend(title = "",
+                              override.aes=list(fill = NA)),
+         fill = FALSE) +
+  labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
-  facet_grid(rows = vars(measure), scales = "free_y", switch = "y", labeller = as_labeller(c(r = "Growth (r)", R = "Effective reproduction\nnumber (Re)") ) )
+  facet_grid(rows = vars(measure),
+             scales = "free_y",
+             switch = "y",
+             labeller = as_labeller(c(r = "Daily growth rate (r)",
+                                      R = "Effective reproduction\nnumber (Re)")))
+
 
   
 ```
@@ -1306,30 +1337,14 @@ r_all_sliding %>%
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Halving time (in days)",
        title = "Halving times of 111/999 calls and 111 online reports",
-       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown")+
+       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown") +
   scale_colour_manual(values = pal)
 
-
-# r_all_sliding %>%
-#   filter(!is.na(halving_t)) %>% 
-#   group_by(nhs_region) %>%
-#   slice(which.min(r)) %>%
-#   ggplot(aes(x = nhs_region, y = halving_t)) +
-#   geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-#   geom_point() +
-#   coord_flip() +
-#   theme_bw() +
-#   large_txt +
-#   # ylim(c(0, 80)) +
-#   labs(x = "",
-#        y = "Halving time (in days)",
-#        title = "Lowest halving times of 111/999 calls\nand 111 online reports")
 ```
-
 
 ## Moving window model (0 to 18 years old)
 
@@ -1360,10 +1375,11 @@ for (i in 1:(length(unique_dates)-w)){
   
   model_data <- x_model_all_moving_0_18 %>%
     filter(date >= date_i & date < date_i_max) %>%
-    mutate(day = as.integer(date - date_i))
+    mutate(day = as.integer(date - date_i)) %>% 
+    day_of_week()
   
   
-  mod <- glm(n ~ day * nhs_region,
+  mod <- glm(n ~ day * nhs_region + day_of_week,
              data = model_data,
              family = 'quasipoisson')
   
@@ -1381,7 +1397,7 @@ for (i in 1:(length(unique_dates)-w)){
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
-                                        scale = SI_param$scale, w = 0)
+                                        scale = SI_param$scale, w = 0.5)
 
 #convert growth rates r to R0
 r_all_sliding_0_18 <- r_all_sliding_0_18 %>%
@@ -1408,9 +1424,9 @@ r_all_sliding_0_18 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (r)"
+       y = "Estimated daily growth rate (\u03BB)"
        )+
   scale_colour_manual(values = pal)
 
@@ -1432,7 +1448,7 @@ r_all_sliding_0_18 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Estimated effective reproduction\nnumber (Re)"
        )+
@@ -1455,30 +1471,27 @@ r_R <- r_all_sliding_0_18 %>%
          reference = 0) %>%
   bind_rows(R)
 
-r_R %>%
+fig2_3_0_18 <- r_R %>%
   ggplot(aes(x = w_max, y = value)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
   geom_point(aes(colour = nhs_region)) +
   geom_hline(aes(yintercept = reference), linetype = "dashed") +
-  # geom_errorbar(aes(ymin = R_lower_95, ymax = R_upper_95)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),
-        # strip.text.x = element_blank(),
         strip.placement = "outside"
         ) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
-  labs(x = "",
-       y = "" #Estimated reproduction\nnumber (R)
-       # title = "R estimates",
-       # subtitle = "Calculated based on data from the 14 days prior to each date"
-       )+
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
+  labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
-  facet_grid(rows = vars(measure), scales = "free_y", switch = "y", labeller = as_labeller(c(r = "Growth (r)", R = "Effective reproduction\nnumber (Re)") ) )
+  facet_grid(rows = vars(measure),
+             scales = "free_y",
+             switch = "y",
+             labeller = as_labeller(c(r = "Daily growth rate (r)",
+                                      R = "Effective reproduction\nnumber (Re)")))
 
 ```
 
@@ -1492,17 +1505,16 @@ corresponding growth rate includes 0.
 r_all_sliding_0_18 %>%
   filter(!is.na(halving_t)) %>% 
   ggplot(aes(x = w_max, y = halving_t, colour = nhs_region)) +
-  # geom_ribbon(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95, fill = nhs_region), alpha = 0.3) +
   geom_line() +
   geom_point() +
   geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_segment(data = filter(r_all_sliding_0_18, halving_t_upper_95 > 30), aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
+  geom_segment(data = filter(r_all_sliding_0_18, halving_t_upper_95 > 30),
+               aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
   ylim(c(0, 30)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Halving time (in days)",
        title = "Halving times of 111/999 calls and 111 online reports\nfor 0-18 years old",
@@ -1542,10 +1554,11 @@ for (i in 1:(length(unique_dates)-w)){
   
   model_data <- x_model_all_moving_19_69 %>%
     filter(date >= date_i & date < date_i_max) %>%
-    mutate(day = as.integer(date - date_i))
+    mutate(day = as.integer(date - date_i)) %>% 
+    day_of_week()
   
   
-  mod <- glm(n ~ day * nhs_region,
+  mod <- glm(n ~ day * nhs_region + day_of_week,
              data = model_data,
              family = 'quasipoisson')
   
@@ -1563,7 +1576,7 @@ for (i in 1:(length(unique_dates)-w)){
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
-                                        scale = SI_param$scale, w = 0)
+                                        scale = SI_param$scale, w = 0.5)
 
 #convert growth rates r to R0
 r_all_sliding_19_69 <- r_all_sliding_19_69 %>%
@@ -1590,10 +1603,9 @@ r_all_sliding_19_69 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(colour = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (r)"
-       )+
+       y = "Estimated daily growth rate (\u03BB)") +
   scale_colour_manual(values = pal)
 
 ```
@@ -1614,7 +1626,7 @@ r_all_sliding_19_69 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Estimated effective reproduction\nnumber (Re)"
        )+
@@ -1637,14 +1649,12 @@ r_R <- r_all_sliding_19_69 %>%
          reference = 0) %>%
   bind_rows(R)
 
-r_R %>%
+fig2_3_19_69 <- r_R %>%
   ggplot(aes(x = w_max, y = value)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
   geom_point(aes(colour = nhs_region)) +
   geom_hline(aes(yintercept = reference), linetype = "dashed") +
-  # geom_errorbar(aes(ymin = R_lower_95, ymax = R_upper_95)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
@@ -1653,15 +1663,14 @@ r_R %>%
         # strip.text.x = element_blank(),
         strip.placement = "outside"
         ) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
-  labs(x = "",
-       y = "" #Estimated reproduction\nnumber (R)
-       # title = "R estimates",
-       # subtitle = "Calculated based on data from the 14 days prior to each date"
-       )+
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
+  labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
-  facet_grid(rows = vars(measure), scales = "free_y", switch = "y", labeller = as_labeller(c(r = "Growth (r)", R = "Effective reproduction\nnumber (Re)") ) )
-
+  facet_grid(rows = vars(measure),
+             scales = "free_y",
+             switch = "y",
+             labeller = as_labeller(c(r = "Daily growth rate (r)",
+                                      R = "Effective reproduction\nnumber (Re)")))
   
 ```
 
@@ -1675,21 +1684,20 @@ of the corresponding growth rate includes 0.
 r_all_sliding_19_69 %>%
   filter(!is.na(halving_t)) %>% 
   ggplot(aes(x = w_max, y = halving_t, colour = nhs_region)) +
-  # geom_ribbon(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95, fill = nhs_region), alpha = 0.3) +
   geom_line() +
   geom_point() +
   geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_segment(data = filter(r_all_sliding_19_69, halving_t_upper_95 > 30), aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
+  geom_segment(data = filter(r_all_sliding_19_69, halving_t_upper_95 > 30),
+               aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
   ylim(c(0, 30)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Halving time (in days)",
        title = "Halving times of 111/999 calls and 111 online reports\nfor 19-69 years old",
-       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown")+
+       subtitle = "Calculated based on date from the 14 days prior to each date\nUpper bounds > 30 days not shown") +
   scale_colour_manual(values = pal)
 
 ```
@@ -1727,10 +1735,11 @@ for (i in 1:(length(unique_dates)-w)){
   
   model_data <- x_model_all_moving_70_120 %>%
     filter(date >= date_i & date < date_i_max) %>%
-    mutate(day = as.integer(date - date_i))
+    mutate(day = as.integer(date - date_i)) %>% 
+    day_of_week()
   
   
-  mod <- glm(n ~ day * nhs_region,
+  mod <- glm(n ~ day * nhs_region + day_of_week,
              data = model_data,
              family = 'quasipoisson')
   
@@ -1748,7 +1757,7 @@ for (i in 1:(length(unique_dates)-w)){
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
-                                        scale = SI_param$scale, w = 0)
+                                        scale = SI_param$scale, w = 0.5)
 
 #convert growth rates r to R0
 r_all_sliding_70_120 <- r_all_sliding_70_120 %>%
@@ -1775,9 +1784,9 @@ r_all_sliding_70_120 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (r)"
+       y = "Estimated daily growth rate (\u03BB)"
        )+
   scale_colour_manual(values = pal)
 
@@ -1799,10 +1808,9 @@ r_all_sliding_70_120 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated effective reproduction\nnumber (Re)"
-       )+
+       y = "Estimated effective reproduction\nnumber (Re)") +
   scale_colour_manual(values = pal)
 
 ```
@@ -1822,31 +1830,27 @@ r_R <- r_all_sliding_70_120 %>%
          reference = 0) %>%
   bind_rows(R)
 
-r_R %>%
+fig2_3_70_120 <- r_R %>%
   ggplot(aes(x = w_max, y = value)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
   geom_point(aes(colour = nhs_region)) +
   geom_hline(aes(yintercept = reference), linetype = "dashed") +
-  # geom_errorbar(aes(ymin = R_lower_95, ymax = R_upper_95)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),
-        # strip.text.x = element_blank(),
         strip.placement = "outside"
         ) +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
-  labs(x = "",
-       y = "" #Estimated reproduction\nnumber (R)
-       # title = "R estimates",
-       # subtitle = "Calculated based on data from the 14 days prior to each date"
-       )+
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
+  labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
-  facet_grid(rows = vars(measure), scales = "free_y", switch = "y", labeller = as_labeller(c(r = "Growth (r)", R = "Effective reproduction\nnumber (Re)") ) )
-
+  facet_grid(rows = vars(measure),
+             scales = "free_y",
+             switch = "y",
+             labeller = as_labeller(c(r = "Daily growth rate (r)",
+                                      R = "Effective reproduction\nnumber (Re)")))  
   
 ```
 
@@ -1860,17 +1864,17 @@ interval of the corresponding growth rate includes 0.
 r_all_sliding_70_120 %>%
   filter(!is.na(halving_t)) %>% 
   ggplot(aes(x = w_max, y = halving_t, colour = nhs_region)) +
-  # geom_ribbon(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95, fill = nhs_region), alpha = 0.3) +
   geom_line() +
   geom_point() +
   geom_errorbar(aes(ymin = halving_t_lower_95, ymax = halving_t_upper_95)) +
-  geom_segment(data = filter(r_all_sliding_70_120, halving_t_upper_95 > 30), aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
+  geom_segment(data = filter(r_all_sliding_70_120, halving_t_upper_95 > 30),
+               aes(x = w_max, xend = w_max, y = halving_t_lower_95, yend = 30)) +
   ylim(c(0, 30)) +
   #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom") +
-  guides(color = guide_legend(title = "",override.aes=list(fill=NA)), fill = F) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Halving time (in days)",
        title = "Halving times of 111/999 calls and 111 online reports\nfor 70-120 years old",
@@ -1879,6 +1883,624 @@ r_all_sliding_70_120 %>%
 
 ```
 
+
+## Combine all age plots in a single plot
+
+```{r fig_2_3_all_ages, fig.height = 12}
+
+ggpubr::ggarrange(fig2_3_0_18,
+                  fig2_3_19_69,
+                  fig2_3_70_120,
+                  nrow = 3,
+                  labels = "AUTO", # labels
+                  common.legend = TRUE, # COMMON LEGEND
+                  legend = "bottom", # legend position
+                  align = "hv") 
+
+
+```
+
+
+
+<!-- =======================================================  -->
+<!-- =======================================================  -->
+<!-- ======================================================= -->
+
+
+# Compare with death time series {.tabset .tabset-fade .tabset-pills}
+
+## Outline
+
+We want to explore the correlation between 111/999 reports and deaths, and
+assess the potential for reports to be used as an early warning system for
+disease resurgence.
+
+Death data are publically available. Will need to truncate the time series to
+avoid bias from reporting delay - we assume a conservative delay of three weeks.
+
+
+
+## Deaths over time
+
+```{r dth_ts_plot}
+
+delay_max <- 21
+
+ggplot(dth, aes(date_report, deaths, colour = nhs_region)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess", span = .5, color = "black") +
+  theme_bw() +
+  large_txt +
+  scale_weeks +
+  theme(legend.position = "bottom") +
+  rotate_x + 
+  guides(color = guide_legend(title = "", ncol = 3)) +
+  labs(
+    # title = "COVID-19 related 111/999 calls and\n111 online reports over time",
+       x = NULL,
+       y = "Number of deaths reported")+
+  geom_vline(aes(xintercept = max(dth$date_report)-delay_max), col = "darkgrey", lty = "longdash") +
+  scale_colour_manual(values = pal)
+
+```
+
+Shift death time series back to try to align peaks.
+
+```{r dth_ts_lag}
+
+l <- 14
+lab <- paste0("Deaths lagged by ", l, " days")
+
+trunc_date <- max(dth$date_report) - delay_max
+
+dth_lag <- dth %>% 
+  filter(date_report <= trunc_date) %>% # truncate for reporting delay
+  mutate(plot_date = date_report - l, count = deaths,  measure = "Deaths") #region = nhs_region,
+x_plot <- mutate(x, plot_date = date) %>%
+  filter(!is.na(nhs_region)) %>%
+  group_by(plot_date, nhs_region) %>%
+  summarise(count = sum(count, na.rm = T)) %>%
+  ungroup %>%
+  mutate(measure = "Reports")
+
+tot <- bind_rows(x_plot, dth_lag)
+
+plot_lag <- 
+ggplot(x_plot, aes(x = plot_date, y = count)) +
+  geom_point(aes(colour = nhs_region), alpha = 0.2) +
+  geom_line(aes(colour = nhs_region),alpha = 0.2) +
+  geom_point(data = dth_lag, aes(y = count*1e2, colour = nhs_region)) +
+  geom_line(data = dth_lag, aes(y = count*1e2, colour = nhs_region)) +
+  geom_text(x = trunc_date-l+12, y = 25000, label = lab, size = 3) +
+  geom_text(x = min(x_plot$plot_date) - 8, y = 25000, label = "Reports", col = "darkgrey",size = 3) +
+  scale_y_continuous(sec.axis = sec_axis(~./1e2, name = "Number of daily deaths reported")) +
+  theme_bw() +
+  scale_weeks +
+  theme(legend.position = "bottom") +
+  rotate_x + 
+  guides(color = guide_legend(title = "", ncol = 3)) +
+  labs(
+       title = "111/999 reports and lagged reported deaths over time",
+       x = NULL,
+       y = "Number of daily reports")+
+  scale_colour_manual(values = pal)
+
+plot_lag
+```
+
+
+
+## Lagged correlation
+
+We calculate Pearson's correlation coefficient between deaths and NHS pathways
+notifications using different lags. Confidence intervals are obtained using
+bootstrap. Note that results were also confirmed using Spearman's rank
+correlation.
+
+First join the pathways and death data, and aggregate over all England:
+
+```{r data_agg}
+## truncate death data for reporting delay
+dth_trunc <- dth %>%
+  rename(date = date_report) %>%
+  filter(date <= trunc_date) 
+
+## join with notification data
+all_data <- x %>% 
+  filter(!is.na(nhs_region)) %>%
+  group_by(date, nhs_region) %>%
+  summarise(count = sum(count, na.rm = T)) %>%
+  ungroup %>%
+  inner_join(dth_trunc,
+             by = c("date","nhs_region"))
+
+all_tot <- all_data %>%
+  group_by(date) %>%
+  summarise(count = sum(count, na.rm = TRUE),
+            deaths = sum(deaths, na.rm = TRUE)) 
+
+```
+
+
+Calculate correlation with lagged notifications from 0 to 30 days behind deaths:
+
+```{r lag_cor}
+## Function to calculate Pearson's correlation between deaths and lagged
+## reports. Note that `pearson` can be replaced with `spearman` for rank
+## correlation.
+
+getcor <- function(x, ndx) {
+  return(cor(x$deaths[ndx],
+             x$note_lag[ndx],
+             use = "complete.obs",
+             method = "pearson"))
+}
+
+## Catch if sample size throws an error
+getcor2 <- possibly(getcor, otherwise = NA)
+
+getboot <- function(x) {
+  result <- boot::boot.ci(boot::boot(x, getcor2, R = 1000), 
+                           type="bca")
+  return(c(result$t0,result$bca[4:5]))
+}
+
+
+
+## Calculate all correlations + bootstrap CIs
+lag_cor <- data.frame()
+for (i in 0:30) {
+  
+  boot <- NULL
+  boot_ci <- NULL
+  
+  ## lag reports
+  temp <- all_tot %>% 
+    mutate(note_lag = lag(count, i)) 
+  
+  ## calculate bootstrap CI for rank correlation
+  boot <- getboot(temp)
+  
+  temp %>%
+    summarise(r = boot[1],
+              r_low = boot[2],
+              r_hi = boot[3],
+              lag = i,
+              n = sum(!is.na(note_lag) & !is.na(deaths))) %>%
+    select(lag, r,r_low, r_hi, n) -> summary
+  
+  lag_cor <- bind_rows(lag_cor, summary)
+}
+
+cor_vs_lag <- ggplot(lag_cor, aes(lag, r)) +
+  theme_bw() +
+  geom_ribbon(aes(ymin = r_low, ymax = r_hi), alpha = 0.2) +
+  geom_hline(yintercept = 0, lty = "longdash") +
+  geom_point() +
+  geom_line() +
+  labs(x = "Lag between NHS pathways and death data (days)",
+       y = "Pearson's correlation") +
+  large_txt
+cor_vs_lag
+
+l_opt <- which.max(lag_cor$r)
+
+dth_vs_note <- all_tot %>% 
+    mutate(note_lag = lag(count, lag_cor$lag[l_opt])) %>%
+    filter(!is.na(note_lag)) %>%
+  ggplot(aes(y = deaths, x = note_lag)) +
+  geom_point() + 
+  geom_smooth(color = "black",
+              method = "lm", formula = "y ~ x") +
+  theme_bw() +
+  labs(y = "Daily number of \ndeaths reported",
+       x = "Daily number of NHS Pathways reports") +
+  large_txt
+dth_vs_note
+
+## REGIONAL ##
+lag_cor_reg <- data.frame()
+for (l in 0:30) {
+
+  temp <-
+    all_data %>%
+    group_by(nhs_region) %>%
+    mutate(note_lag = lag(count, l)) %>%
+    summarise(r = cor(deaths, note_lag,
+                      use = "complete.obs",
+                      method = "pearson"),
+              lag = l,
+              n = sum(!is.na(note_lag) & !is.na(deaths))) %>%
+    select(lag, r, n, nhs_region)
+
+  lag_cor_reg <- bind_rows(lag_cor_reg, temp)
+}
+lag_cor_reg <- lag_cor_reg[-1,]
+
+lag_cor_reg %>%
+ggplot(aes(lag, r, col = nhs_region)) +
+  geom_hline(yintercept = 0, lty = "longdash") +
+  geom_point() +
+  geom_line() +
+  theme_bw() +
+  labs(x = "Lag (days)", col = "NHS region")
+
+```
+
+
+
+## Regress deaths on lagged reports
+
+```{r regress}
+
+all_tot <- all_tot %>%
+  rename(date_death = date) %>%
+  mutate(note_lag = lag(count, lag_cor$lag[l_opt]),
+         note_lag_c = (note_lag - mean(note_lag, na.rm = T)),
+         date_note = lag(date_death,16))
+
+lag_mod <- glm(deaths ~ note_lag, data = all_tot, family = "quasipoisson")
+null_mod <- glm(deaths ~ 1, data = all_tot[!is.na(all_tot$note_lag),], family = "quasipoisson")
+
+summary(lag_mod)
+# plot(lag_mod)
+
+exp(coefficients(lag_mod))
+
+# anova(null_mod, lag_mod, test = "Chisq")
+# 1 - (lag_mod$deviance/lag_mod$null.deviance)
+
+all_tot$fitted[!is.na(all_tot$note_lag)] <- fitted(lag_mod)
+
+obs_vs_pred <- all_tot %>% 
+    filter(!is.na(note_lag)) %>%
+  ggplot(aes(x = deaths, y = fitted)) +
+  geom_point() + 
+  geom_smooth(color = "black", 
+              method = "lm", formula = "y ~ x") +
+  geom_abline(slope = 1, col = "black", lty = "longdash") +
+  theme_bw() +
+  labs(y = "Predicted",
+       x = "Observed") +
+  large_txt
+obs_vs_pred
+
+```
+
+
+
+
+<!-- =======================================================  -->
+<!-- =======================================================  -->
+<!-- ======================================================= -->
+
+# Supplementary figures {.tabset .tabset-fade .tabset-pills}
+
+## Serial interval distribution
+
+```{r fig_serialinterval, fig.width = 10}
+#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
+SI_distribution <- distcrete::distcrete("gamma", interval = 1,
+                                        shape = SI_param$shape,
+                                        scale = SI_param$scale, w = 0.5)
+
+SI_distribution_alt <- distcrete::distcrete("lnorm", interval = 1,
+                                            meanlog = log(4.7),
+                                            sdlog = log(2.9), w = 0.5)
+
+SI_dist1 <- as.data.frame(table(SI_distribution$r(1e5))) %>%
+  ggplot(.) + 
+  geom_col(aes(factor(Var1), Freq)) + 
+  labs(x = "Serial interval (days)", y = "Frequency") +
+  scale_x_discrete(breaks = seq(0, 100, 5)) +
+  theme_bw()
+SI_dist2 <- as.data.frame(table(SI_distribution_alt$r(1e5))) %>%
+  ggplot(.) + 
+  geom_col(aes(factor(Var1), Freq)) + 
+  labs(x = "Serial interval (days)", y = "Frequency") +
+  scale_x_discrete(breaks = seq(0, 500, 20)) +
+  theme_bw()
+
+ggpubr::ggarrange(SI_dist1,
+                  SI_dist2,
+                  nrow = 1,
+                  labels = "AUTO") 
+
+
+```
+
+
+## Sensitivity analysis - 7 or 21 days moving window
+
+We repoduce the window analysis with either a 7 or 21 days window for sensitivity
+purposes.
+
+First, with 7 days:
+
+```{r sliding_model_7}
+## set moving time window (1/2/3 weeks)
+w <- 7
+
+# create empty df
+r_all_sliding <- NULL
+
+## make data for model
+x_model_all_moving <- x %>%
+  filter(!is.na(nhs_region)) %>% 
+  group_by(date, nhs_region) %>%
+  summarise(n = sum(count)) 
+
+unique_dates <- unique(x_model_all_moving$date)
+
+for (i in 1:(length(unique_dates)-w)){
+
+  date_i <- unique_dates[i]
+
+  date_i_max <- date_i + w
+  
+  model_data <- x_model_all_moving %>%
+    filter(date >= date_i & date < date_i_max) %>%
+    mutate(day = as.integer(date - date_i)) %>% 
+    day_of_week()
+  
+  
+  mod <- glm(n ~ day * nhs_region + day_of_week,
+             data = model_data,
+             family = 'quasipoisson')
+  
+  # get growth rate
+  r <- get_r(mod)
+  r$w_min <- date_i
+  r$w_max <- date_i_max
+  
+  # combine all estimates
+  r_all_sliding <- bind_rows(r_all_sliding, r)
+  
+}
+
+#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
+SI_distribution <- distcrete::distcrete("gamma", interval = 1,
+                                        shape = SI_param$shape,
+                                        scale = SI_param$scale,
+                                        w = 0.5)
+
+#convert growth rates r to R0
+r_all_sliding <- r_all_sliding %>%
+  mutate(R = epitrix::r2R0(r, SI_distribution),
+         R_lower_95 = epitrix::r2R0(lower_95, SI_distribution),
+         R_upper_95 = epitrix::r2R0(upper_95, SI_distribution))
+
+```
+
+```{r all_sliding_growth_7}
+# plot
+plot_growth <-
+r_all_sliding %>%
+  ggplot(aes(x = w_max, y = r)) +
+  geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
+  geom_line(aes(colour = nhs_region)) +
+  geom_point(aes(colour = nhs_region)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  theme_bw() +
+  scale_weeks +
+  theme(legend.position = "bottom",
+        plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
+  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
+  labs(x = "",
+       y = "Estimated daily growth rate (\u03BB)") +
+  scale_colour_manual(values = pal)
+
+```
+
+```{r all_sliding_R_7}
+plot_R <- r_all_sliding %>%
+  ggplot(aes(x = w_max, y = R)) +
+  geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
+  geom_line(aes(colour = nhs_region)) +
+  geom_point(aes(colour = nhs_region)) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  theme_bw() +
+  scale_weeks +
+  theme(legend.position = "bottom",
+        plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
+  labs(x = "",
+       y = "Estimated effective reproduction\nnumber (Re)") +
+  scale_colour_manual(values = pal)
+
+```
+
+```{r fig2_3_7}
+
+R <- r_all_sliding %>%
+  mutate(lower_95 = R_lower_95, 
+         upper_95 = R_upper_95,
+         value = R,
+         measure = "R",
+         reference = 1)
+
+r_R <- r_all_sliding %>%
+  mutate(measure = "r",
+         value = r,
+         reference = 0) %>%
+  bind_rows(R)
+
+r_R_7 <- r_R %>%
+  ggplot(aes(x = w_max, y = value)) +
+  geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
+  geom_line(aes(colour = nhs_region)) +
+  geom_point(aes(colour = nhs_region)) +
+  geom_hline(aes(yintercept = reference), linetype = "dashed") +
+  theme_bw() +
+  scale_weeks +
+  theme(legend.position = "bottom",
+        plot.margin = margin(0.5,1,0,0, "cm"),
+        strip.background = element_blank(),
+        strip.placement = "outside"
+        ) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
+  labs(x = "", y = "") +
+  scale_colour_manual(values = pal) +
+  facet_grid(rows = vars(measure),
+             scales = "free_y",
+             switch = "y",
+             labeller = as_labeller(c(r = "Daily growth rate (r)",
+                                      R = "Effective reproduction\nnumber (Re)")))
+
+  
+```
+
+
+For 21 days:
+
+```{r sliding_model_21}
+## set moving time window (1/2/3 weeks)
+w <- 21
+
+# create empty df
+r_all_sliding <- NULL
+
+## make data for model
+x_model_all_moving <- x %>%
+  filter(!is.na(nhs_region)) %>% 
+  group_by(date, nhs_region) %>%
+  summarise(n = sum(count)) 
+
+unique_dates <- unique(x_model_all_moving$date)
+
+for (i in 1:(length(unique_dates)-w)){
+
+  date_i <- unique_dates[i]
+
+  date_i_max <- date_i + w
+  
+  model_data <- x_model_all_moving %>%
+    filter(date >= date_i & date < date_i_max) %>%
+    mutate(day = as.integer(date - date_i)) %>% 
+    day_of_week()
+  
+  
+  mod <- glm(n ~ day * nhs_region + day_of_week,
+             data = model_data,
+             family = 'quasipoisson')
+  
+  # get growth rate
+  r <- get_r(mod)
+  r$w_min <- date_i
+  r$w_max <- date_i_max
+  
+  # combine all estimates
+  r_all_sliding <- bind_rows(r_all_sliding, r)
+  
+}
+
+#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
+SI_distribution <- distcrete::distcrete("gamma", interval = 1,
+                                        shape = SI_param$shape,
+                                        scale = SI_param$scale,
+                                        w = 0.5)
+
+#convert growth rates r to R0
+r_all_sliding <- r_all_sliding %>%
+  mutate(R = epitrix::r2R0(r, SI_distribution),
+         R_lower_95 = epitrix::r2R0(lower_95, SI_distribution),
+         R_upper_95 = epitrix::r2R0(upper_95, SI_distribution))
+
+```
+
+```{r all_sliding_growth_21}
+# plot
+plot_growth <-
+r_all_sliding %>%
+  ggplot(aes(x = w_max, y = r)) +
+  geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
+  geom_line(aes(colour = nhs_region)) +
+  geom_point(aes(colour = nhs_region)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  theme_bw() +
+  scale_weeks +
+  theme(legend.position = "bottom",
+        plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
+  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
+  labs(x = "",
+       y = "Estimated daily growth rate (\u03BB)") +
+  scale_colour_manual(values = pal)
+
+```
+
+```{r all_sliding_R_21}
+# plot
+plot_R <-
+r_all_sliding %>%
+  ggplot(aes(x = w_max, y = R)) +
+  geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
+  geom_line(aes(colour = nhs_region)) +
+  geom_point(aes(colour = nhs_region)) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  theme_bw() +
+  scale_weeks +
+  theme(legend.position = "bottom",
+        plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
+  labs(x = "",
+       y = "Estimated effective reproduction\nnumber (Re)") +
+  scale_colour_manual(values = pal)
+
+```
+
+```{r fig2_3_21}
+
+R <- r_all_sliding %>%
+  mutate(lower_95 = R_lower_95, 
+         upper_95 = R_upper_95,
+         value = R,
+         measure = "R",
+         reference = 1)
+
+r_R <- r_all_sliding %>%
+  mutate(measure = "r",
+         value = r,
+         reference = 0) %>%
+  bind_rows(R)
+
+r_R_21 <- r_R %>%
+  ggplot(aes(x = w_max, y = value)) +
+  geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
+  geom_line(aes(colour = nhs_region)) +
+  geom_point(aes(colour = nhs_region)) +
+  geom_hline(aes(yintercept = reference), linetype = "dashed") +
+  theme_bw() +
+  scale_weeks +
+  theme(legend.position = "bottom",
+        plot.margin = margin(0.5,1,0,0, "cm"),
+        strip.background = element_blank(),
+        strip.placement = "outside"
+        ) +
+  guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
+  labs(x = "", y = "") +
+  scale_colour_manual(values = pal) +
+  facet_grid(rows = vars(measure),
+             scales = "free_y",
+             switch = "y",
+             labeller = as_labeller(c(r = "Daily growth rate (r)",
+                                      R = "Effective reproduction\nnumber (Re)")))
+  
+```
+
+```{r fig_sensitivity_window, fig.height = 8} 
+
+ggpubr::ggarrange(r_R_7,
+                  r_R_21,
+                  nrow = 2,
+                  labels = "AUTO",
+                  common.legend = TRUE,
+                  legend = "bottom") 
+
+```
 
 
 
