@@ -38,7 +38,7 @@ library(reportfactory)
 ```
 
 ```{r load_data}
-rfh_load_scripts()
+reportfactory::rfh_load_scripts()
 
 last_output_dir <- reportfactory::filter_log(
   readRDS(here::here(".compile_log.rds")),
@@ -49,6 +49,20 @@ figure_folder <- file.path(last_output_dir, "figures", "nhs_paths")
 tables_folder <- file.path(last_output_dir, "excel_tables")
 
 latest_data <- rio::import(file.path(tables_folder, "r_all_sliding.xlsx"))
+
+latest_data_grouped <- latest_data %>%
+  group_by(w_max) %>%
+  summarise(r = mean(r, na.rm = TRUE),
+            r_lower = mean(lower_95, na.rm = TRUE),
+            r_upper = mean(upper_95, na.rm = TRUE),
+            halving = mean(halving_t, na.rm = TRUE),
+            halving_lower = mean(halving_t_lower_95, na.rm = TRUE),
+            halving_upper = mean(halving_t_upper_95, na.rm = TRUE),
+            R = mean(R, na.rm = TRUE),
+            R_lower = mean(R_lower_95, na.rm = TRUE),
+            R_upper = mean(R_upper_95, na.rm = TRUE))
+
+min_grouped <- which.min(latest_data_grouped$halving)
 
 x <- import_pathways()
 database_date <- attr(x, "timestamp")
@@ -165,16 +179,16 @@ knitr::include_graphics(file.path(figure_folder, "all_volume-1.png"))
 
 Analyses over sliding time windows show that daily
 growth rates have likely been changing substantially during this period. Results
-show a marked decrease in growth rates (r) and effective reproduction numbers
-(Re) until the 6th April 2020, after which these numbers remained low in all NHS
-regions for a period of about two weeks (Figure 2). The lowest r estimated over
+show a marked decrease in growth rates ($r$) and effective reproduction numbers
+($R_e$) until the 6th April 2020, after which these numbers remained low in all NHS
+regions for a period of about two weeks (Figure \@ref(fig:estimates)). The lowest $r$ estimated over
 all NHS regions was observed for Monday 13 April 2020 at -0.08
 (95% CI: -0.14 - -0.03), corresponding to a halving time of 8.27 days (95% CI: 
 5.03 - 27.45) and an Re of 0.68 (95% CI: 0.51 - 0.88). Similar trends were 
 observed across all NHS regions, with the exception of London which showed 
-lower r (and Re) after the 13th of April.
+lower $r$ (and $R_e$) after the 13th of April.
 
-Figure \@ref(fig:estimates)
+
 
 ```{r estimates, fig.cap="\\small \\textbf{Estimates of daily growth rates (r) and effective reproduction numbers (Re) for potential COVID-19 cases reported through NHS Pathways.} Dotted lines indicate the central estimate, and ribbons their 95\\% confidence intervals. Estimates are indicated at the end of the time window used for estimation, so that values of r and Re provided on a given day correspond to the 2 weeks leading up to that day.", out.width = "70%", fig.align = "center"}
 
@@ -184,15 +198,15 @@ knitr::include_graphics(file.path(figure_folder, "fig2_3-1.png"))
 
 Confidence intervals suggest r values remained significantly lower than 0 (and
 Re lower than 1) in all regions until the 15th of April, consistent with a
-significant decrease in COVID-19 related reports. After this, values of r and
-Re seem to have gradually increased, to a point where there was no longer any
+significant decrease in COVID-19 related reports. After this, values of $r$ and
+$R_e$ seem to have gradually increased, to a point where there was no longer any
 strong evidence of a decrease in COVID-19 reports in any NHS region as of the
 4th May 2020, as the 95% CIs of all growth rates include 0. The most recent
 estimate of r averaged over all NHS regions is -0.02 (95% CI: -0.06 - 0.02),
 corresponding to an Re of 0.93 (95% CI: 0.78 - 1.1).
 
 The strongest correlation between NHS Pathways reports and deaths was obtained 
-with a lag of 16 days (r = 0.9; 95% CI: 0.6 - 0.99). Figure 3 illustrates the
+with a lag of 16 days (Pearson's correlation = 0.9; 95% CI: 0.6 - 0.99). Figure 3 illustrates the
 observed trend in correlation across all tested lags. Estimates become
 increasingly unstable for lags above 23 days as the number of points within the
 overlapping time window becomes small (n = 3 at 30 days lag). There is however
@@ -216,7 +230,7 @@ Figure \@ref(fig:reportsvsdeaths)
 
 ```{r reportsvsdeaths, fig.cap="\\small \\textbf{Daily total COVID-19 deaths reported in England between 03/04 and 21/04, against the number of potential COVID-19 cases reported through NHS Pathways with a lag of 16 days (between 18/03 and 05/04).} The black line and grey ribbon correspond to a linear regression and the associated 95\\% confidence interval. The coefficient of determination indicates that 85.8\\% of the deviance in reported deaths is linearly explained by NHS Pathways reports.", out.width = "70%", fig.align = "center"}
 
-knitr::include_graphics(file.path(figure_folder, "lag_cor-2.png"))
+knitr::include_graphics(file.path(figure_folder, "regress-1.png"))
 
 ```
 
