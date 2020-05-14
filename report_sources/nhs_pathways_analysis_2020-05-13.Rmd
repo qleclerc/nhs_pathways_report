@@ -1112,13 +1112,13 @@ all_tot_pred <-
 
 glm_fit <- all_tot_pred %>% 
     filter(!is.na(note_lag)) %>%
-  ggplot(aes(x = deaths, y = note_lag)) +
+  ggplot(aes(x = note_lag, y = deaths)) +
   geom_point() + 
-  geom_line(aes(x = exp(pred))) + 
-  geom_ribbon(aes(xmin = low, xmax = hi), alpha = 0.3, col = "grey") +
+  geom_line(aes(y = exp(pred))) + 
+  geom_ribbon(aes(ymin = low, ymax = hi), alpha = 0.3, col = "grey") +
   theme_bw() +
-  labs(x = "Daily number of deaths reported",
-       y = "Daily number of \nNHS Pathways reports") +
+  labs(y = "Daily number of\ndeaths reported",
+       x = "Daily number of NHS Pathways reports") +
   large_txt
 
 glm_fit
@@ -1461,6 +1461,39 @@ ggpubr::ggarrange(r_R_7,
 
 ```
 
+## Correlation between NHS Pathways reports and deaths by NHS region
+
+```{r}
+
+lag_cor_reg <- data.frame()
+
+for (l in 0:30) {
+
+  temp <-
+    all_data %>%
+    group_by(nhs_region) %>%
+    mutate(note_lag = lag(count, l)) %>%
+    summarise(r = cor(deaths, note_lag,
+                      use = "complete.obs",
+                      method = "pearson"),
+              lag = l,
+              n = sum(!is.na(note_lag) & !is.na(deaths))) %>%
+    select(lag, r, n, nhs_region)
+
+  lag_cor_reg <- bind_rows(lag_cor_reg, temp)
+}
+lag_cor_reg <- lag_cor_reg[-1,]
+
+lag_cor_reg %>%
+ggplot(aes(lag, r)) +
+  geom_hline(yintercept = 0, lty = "longdash") +
+  geom_point() +
+  geom_line() +
+  theme_bw() +
+  labs(x = "Lag (days)", col = "NHS region") +
+  facet_wrap(~nhs_region)
+
+```
 
 
 <!-- ======================================================= -->
