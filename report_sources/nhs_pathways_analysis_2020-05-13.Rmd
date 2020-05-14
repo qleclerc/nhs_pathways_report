@@ -1075,21 +1075,55 @@ cor_vs_lag
 
 l_opt <- which.max(lag_cor$r)
 
-dth_vs_note <- all_tot %>% 
-  mutate(note_lag = lag(count, lag_cor$lag[l_opt])) %>%
-  filter(!is.na(note_lag)) %>%
-  ggplot(aes(y = deaths, x = note_lag)) +
-  geom_point() + 
-  geom_smooth(color = "black",
-              method = "glm", formula = "y ~ x") +
-  theme_bw() +
-  labs(y = "Daily number of \ndeaths reported",
-       x = "Daily number of NHS Pathways reports") +
-  large_txt
-dth_vs_note
 
 ```
 
+This analysis suggests that the best lag is `r l_opt-1` days. We then compare 
+and plot the number of deaths reported against the number of NHS Pathways 
+reports lagged by `r l_opt-1` days. 
+
+```{r regress}
+
+all_tot <- all_tot %>%
+  rename(date_death = date) %>%
+  mutate(note_lag = lag(count, lag_cor$lag[l_opt]),
+         note_lag_c = (note_lag - mean(note_lag, na.rm = T)),
+         date_note = lag(date_death,16))
+
+lag_mod <- glm(deaths ~ note_lag, data = all_tot, family = "quasipoisson")
+
+summary(lag_mod)
+
+exp(coefficients(lag_mod))
+exp(confint(lag_mod))
+
+Rsq(lag_mod)
+
+mod_fit <- as.data.frame(predict(lag_mod, type = "link", se.fit = TRUE)[1:2])
+
+all_tot_pred <- 
+  all_tot %>%
+  filter(!is.na(note_lag)) %>%
+  mutate(pred = mod_fit$fit,
+         pred.se = mod_fit$se.fit,
+         low = exp(pred - 1.96*pred.se),
+         hi = exp(pred + 1.96*pred.se))
+
+
+glm_fit <- all_tot_pred %>% 
+    filter(!is.na(note_lag)) %>%
+  ggplot(aes(x = deaths, y = note_lag)) +
+  geom_point() + 
+  geom_line(aes(x = exp(pred))) + 
+  geom_ribbon(aes(xmin = low, xmax = hi), alpha = 0.3, col = "grey") +
+  theme_bw() +
+  labs(x = "Daily number of deaths reported",
+       y = "Daily number of \nNHS Pathways reports") +
+  large_txt
+
+glm_fit
+
+```
 
 
 # Supplementary figures {.tabset .tabset-fade .tabset-pills}
@@ -1106,22 +1140,26 @@ SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
                                         scale = SI_param$scale, w = 0.5)
 
-SI_distribution_alt <- distcrete::distcrete("lnorm", interval = 1,
-                                            meanlog = log(4.7),
-                                            sdlog = log(2.9), w = 0.5)
+SI_distribution2 <- distcrete::distcrete("lnorm", interval = 1,
+                                        meanlog = log(4.7),
+                                        sdlog = log(2.9), w = 0.5)
 
-SI_dist1 <- as.data.frame(table(SI_distribution$r(1e5))) %>%
-  ggplot(.) + 
-  geom_col(aes(factor(Var1), Freq)) + 
-  labs(x = "Serial interval (days)", y = "Frequency") +
-  scale_x_discrete(breaks = seq(0, 100, 5)) +
-  theme_bw()
-SI_dist2 <- as.data.frame(table(SI_distribution_alt$r(1e5))) %>%
-  ggplot(.) + 
-  geom_col(aes(factor(Var1), Freq)) + 
-  labs(x = "Serial interval (days)", y = "Frequency") +
-  scale_x_discrete(breaks = seq(0, 500, 20)) +
-  theme_bw()
+SI_dist1 <- data.frame(x = SI_distribution$r(1e5)) 
+SI_dist1 <- count(SI_dist1, x) %>%
+    ggplot() +
+    geom_col(aes(x = x, y = n)) +
+    labs(x = "Serial interval (days)", y = "Frequency") +
+    scale_x_continuous(breaks = seq(0, 30, 5)) +
+    theme_bw()
+
+SI_dist2 <- data.frame(x = SI_distribution2$r(1e5)) 
+SI_dist2 <- count(SI_dist2, x) %>%
+    ggplot() +
+    geom_col(aes(x = x, y = n)) +
+    labs(x = "Serial interval (days)", y = "Frequency") +
+    scale_x_continuous(breaks = seq(0, 200, 20), limits = c(0, 200)) +
+    theme_bw()
+
 
 ggpubr::ggarrange(SI_dist1,
                   SI_dist2,
