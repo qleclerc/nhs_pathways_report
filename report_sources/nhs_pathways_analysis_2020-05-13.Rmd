@@ -121,7 +121,7 @@ nhs_region_pop
 
 ```
 
-Import publically available deaths per NHS region:
+Finally, we import publically available deaths per NHS region:
 
 ```{r import_deaths}
 
@@ -136,7 +136,7 @@ dth
 
 ## Completion date
 
-We extract the completion date from the file timestamp:
+We extract the completion date from the NHS Pathways file timestamp:
 
 ```{r database_date}
 
@@ -145,7 +145,7 @@ database_date
 
 ```
 
-The **completion date** of the data is
+The **completion date** of the NHS Pathways data is
 **`r format(database_date, format = "%A %d %b %Y")`**.
 
 
@@ -156,7 +156,7 @@ The **completion date** of the data is
 We add the following variable:
 
 * `day`: an integer representing the number of days from the earliest data
-  reported, used for modelling purposes; the first day is 0
+reported, used for modelling purposes; the first day is 0
 
 ```{r add_variables}
 
@@ -206,23 +206,23 @@ get_r <- function(model) {
     rename(lower_95 = "2.5 %",
            upper_95 = "97.5 %") %>%
     mutate(var = sub("day:", "", var))
-
+  
   ## reconstruct values: intercept + region-coefficient
   for (i in 2:nrow(out)) {
     out[i, -1] <- out[1, -1] + out[i, -1]
   }
-
+  
   ## find the name of the intercept, restore regions names
   out <- out %>%
     mutate(nhs_region = model$xlevels$nhs_region) %>%
     select(nhs_region, everything(), -var)
-
+  
   ## find halving times
   halving <- log(0.5) / out[,-1] %>%
     rename(halving_t = r,
-             halving_t_lower_95 = lower_95,
-             halving_t_upper_95 = upper_95)
-
+           halving_t_lower_95 = lower_95,
+           halving_t_upper_95 = upper_95)
+  
   ## set halving times with exclusion intervals to NA
   no_halving <- out$lower_95 < 0 & out$upper_95 > 0
   halving[no_halving, ] <- NA_real_
@@ -304,10 +304,8 @@ tab_date_region_all %>%
   theme(legend.position = "bottom") +
   rotate_x + 
   guides(color = guide_legend(title = "", ncol = 3)) +
-  labs(
-    # title = "COVID-19 related 111/999 calls and\n111 online reports over time",
-       x = NULL,
-       y = "Number of daily reports")+
+  labs(x = NULL,
+       y = "Number of daily reports") +
   scale_colour_manual(values = pal)
 
 tab_date_region_all %>% 
@@ -343,8 +341,7 @@ tab_date_region_age_all %>%
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 90, hjust = 1)) +
   guides(fill = guide_legend(title = "Age", ncol = 3)) +
-  labs(title = "",#"COVID-19 related 111/999 calls and 111 online reports\nby age and region over time",
-       x = NULL,
+  labs(x = NULL,
        y = "Total daily reports by age") +
   facet_wrap(~ nhs_region, ncol = 4)
 
@@ -366,10 +363,7 @@ tab_date_region_age_all %>%
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 90, hjust = 1)) +
   guides(color = guide_legend(title = "Age", ncol = 3)) +
-  labs(
-    # title = "Proportion of COVID-19 related 111/999 calls and 111 online reports\nby age and region over time",
-       # subtitle = "Horizontal lines indicate the total proportion of the regional population in each age group",
-       x = NULL,
+  labs(x = NULL,
        y = "Proportion of daily reports by age") +
   facet_wrap(~ nhs_region, ncol = 4)
 ```
@@ -393,10 +387,10 @@ x_model_all_moving <- x %>%
 
 unique_dates <- unique(x_model_all_moving$date)
 
-for (i in 1:(length(unique_dates)-w)){
-
+for (i in 1:(length(unique_dates) - w)) {
+  
   date_i <- unique_dates[i]
-
+  
   date_i_max <- date_i + w
   
   model_data <- x_model_all_moving %>%
@@ -419,7 +413,7 @@ for (i in 1:(length(unique_dates)-w)){
   
 }
 
-#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+#serial interval distribution
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
@@ -440,21 +434,19 @@ We examine the evolution of the growth rate by region over time.
 ```{r all_sliding_growth}
 # plot
 plot_growth <-
-r_all_sliding %>%
+  r_all_sliding %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
   geom_point(aes(colour = nhs_region)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  # geom_errorbar(aes(ymin = lower_95, ymax = upper_95)) +
-  #facet_wrap(~nhs_region) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
+  guides(colour = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (r)")+
+       y = "Estimated daily growth rate (r)") +
   scale_colour_manual(values = pal)
 
 ```
@@ -464,7 +456,7 @@ From the growth rate, we derive R and examine its value through time.
 ```{r all_sliding_R}
 # plot
 plot_R <-
-r_all_sliding %>%
+  r_all_sliding %>%
   ggplot(aes(x = w_max, y = R)) +
   geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -476,10 +468,7 @@ r_all_sliding %>%
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated effective reproduction\nnumber (Re)"
-       # title = "R estimates",
-       # subtitle = "Calculated based on data from the 14 days prior to each date"
-       )+
+       y = "Estimated effective reproduction\nnumber (Re)") +
   scale_colour_manual(values = pal)
 
 ```
@@ -512,9 +501,9 @@ r_R %>%
         strip.background = element_blank(),
         # strip.text.x = element_blank(),
         strip.placement = "outside"
-        ) +
+  ) +
   guides(color = guide_legend(title = "",
-                              override.aes=list(fill = NA)),
+                              override.aes = list(fill = NA)),
          fill = FALSE) +
   labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
@@ -525,7 +514,7 @@ r_R %>%
                                       R = "Effective reproduction\nnumber (Re)")))
 
 
-  
+
 ```
 
 
@@ -554,10 +543,10 @@ x_model_all_moving_0_18 <- x %>%
 
 unique_dates <- unique(x_model_all_moving_0_18$date)
 
-for (i in 1:(length(unique_dates)-w)){
-
+for (i in 1:(length(unique_dates) - w)) {
+  
   date_i <- unique_dates[i]
-
+  
   date_i_max <- date_i + w
   
   model_data <- x_model_all_moving_0_18 %>%
@@ -580,7 +569,7 @@ for (i in 1:(length(unique_dates)-w)){
   
 }
 
-#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+#serial interval distribution
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
@@ -597,7 +586,7 @@ r_all_sliding_0_18 <- r_all_sliding_0_18 %>%
 ```{r all_sliding_growth_0_18}
 # plot
 plot_growth <-
-r_all_sliding_0_18 %>%
+  r_all_sliding_0_18 %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -607,10 +596,10 @@ r_all_sliding_0_18 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
+  guides(colour = guide_legend(title = "",override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (\u03BB)"
-       )+
+       y = "Estimated daily growth rate (r)"
+  ) +
   scale_colour_manual(values = pal)
 
 ```
@@ -618,7 +607,7 @@ r_all_sliding_0_18 %>%
 ```{r all_sliding_R_0_18}
 # plot
 plot_R <-
-r_all_sliding_0_18 %>%
+  r_all_sliding_0_18 %>%
   ggplot(aes(x = w_max, y = R)) +
   geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -631,10 +620,11 @@ r_all_sliding_0_18 %>%
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Estimated effective reproduction\nnumber (Re)"
-       )+
+  ) +
   scale_colour_manual(values = pal)
 
 ```
+
 
 ```{r fig2_3_0_18}
 
@@ -663,7 +653,7 @@ fig2_3_0_18 <- r_R %>%
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),
         strip.placement = "outside"
-        ) +
+  ) +
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
@@ -693,10 +683,10 @@ x_model_all_moving_19_69 <- x %>%
 
 unique_dates <- unique(x_model_all_moving_19_69$date)
 
-for (i in 1:(length(unique_dates)-w)){
-
+for (i in 1:(length(unique_dates) - w)) {
+  
   date_i <- unique_dates[i]
-
+  
   date_i_max <- date_i + w
   
   model_data <- x_model_all_moving_19_69 %>%
@@ -719,7 +709,7 @@ for (i in 1:(length(unique_dates)-w)){
   
 }
 
-#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+#serial interval distribution
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
@@ -736,7 +726,7 @@ r_all_sliding_19_69 <- r_all_sliding_19_69 %>%
 ```{r all_sliding_growth_19_69}
 # plot
 plot_growth <-
-r_all_sliding_19_69 %>%
+  r_all_sliding_19_69 %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -748,7 +738,7 @@ r_all_sliding_19_69 %>%
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
   guides(colour = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (\u03BB)") +
+       y = "Estimated daily growth rate (r)") +
   scale_colour_manual(values = pal)
 
 ```
@@ -756,7 +746,7 @@ r_all_sliding_19_69 %>%
 ```{r all_sliding_R_19_69}
 # plot
 plot_R <-
-r_all_sliding_19_69 %>%
+  r_all_sliding_19_69 %>%
   ggplot(aes(x = w_max, y = R)) +
   geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -769,7 +759,7 @@ r_all_sliding_19_69 %>%
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
        y = "Estimated effective reproduction\nnumber (Re)"
-       )+
+  ) +
   scale_colour_manual(values = pal)
 
 ```
@@ -800,9 +790,8 @@ fig2_3_19_69 <- r_R %>%
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),
-        # strip.text.x = element_blank(),
         strip.placement = "outside"
-        ) +
+  ) +
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
@@ -811,7 +800,7 @@ fig2_3_19_69 <- r_R %>%
              switch = "y",
              labeller = as_labeller(c(r = "Daily growth rate (r)",
                                       R = "Effective reproduction\nnumber (Re)")))
-  
+
 ```
 
 Finally, we run the analysis for 70-120 years old.
@@ -832,10 +821,10 @@ x_model_all_moving_70_120 <- x %>%
 
 unique_dates <- unique(x_model_all_moving_70_120$date)
 
-for (i in 1:(length(unique_dates)-w)){
-
+for (i in 1:(length(unique_dates) - w)) {
+  
   date_i <- unique_dates[i]
-
+  
   date_i_max <- date_i + w
   
   model_data <- x_model_all_moving_70_120 %>%
@@ -858,7 +847,7 @@ for (i in 1:(length(unique_dates)-w)){
   
 }
 
-#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+#serial interval distribution
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
@@ -875,7 +864,7 @@ r_all_sliding_70_120 <- r_all_sliding_70_120 %>%
 ```{r all_sliding_growth_70_120}
 # plot
 plot_growth <-
-r_all_sliding_70_120 %>%
+  r_all_sliding_70_120 %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -885,10 +874,10 @@ r_all_sliding_70_120 %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
+  guides(colour = guide_legend(title = "",override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (\u03BB)"
-       )+
+       y = "Estimated daily growth rate (r)"
+  ) +
   scale_colour_manual(values = pal)
 
 ```
@@ -896,7 +885,7 @@ r_all_sliding_70_120 %>%
 ```{r all_sliding_R_70_120}
 # plot
 plot_R <-
-r_all_sliding_70_120 %>%
+  r_all_sliding_70_120 %>%
   ggplot(aes(x = w_max, y = R)) +
   geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -940,7 +929,7 @@ fig2_3_70_120 <- r_R %>%
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),
         strip.placement = "outside"
-        ) +
+  ) +
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
@@ -949,7 +938,7 @@ fig2_3_70_120 <- r_R %>%
              switch = "y",
              labeller = as_labeller(c(r = "Daily growth rate (r)",
                                       R = "Effective reproduction\nnumber (Re)")))  
-  
+
 ```
 
 We combine the estimated growth rates and effective reproduction numbers into
@@ -961,9 +950,9 @@ ggpubr::ggarrange(fig2_3_0_18,
                   fig2_3_19_69,
                   fig2_3_70_120,
                   nrow = 3,
-                  labels = "AUTO", # labels
-                  common.legend = TRUE, # COMMON LEGEND
-                  legend = "bottom", # legend position
+                  labels = "AUTO",
+                  common.legend = TRUE,
+                  legend = "bottom",
                   align = "hv") 
 
 
@@ -990,12 +979,12 @@ avoid bias from reporting delay - we assume a conservative delay of three weeks.
 
 ## Lagged correlation
 
-We calculate Pearson's correlation coefficient between deaths and NHS pathways
+We calculate Pearson's correlation coefficient between deaths and NHS Pathways
 notifications using different lags. Confidence intervals are obtained using
 bootstrap. Note that results were also confirmed using Spearman's rank
 correlation.
 
-First join the pathways and death data, and aggregate over all England:
+First we join the NHS Pathways and death data, and aggregate over all England:
 
 ```{r data_agg}
 ## truncate death data for reporting delay
@@ -1023,7 +1012,7 @@ all_tot <- all_data %>%
 ```
 
 
-Calculate correlation with lagged notifications from 0 to 30 days behind deaths:
+We calculate correlation with lagged NHS Pathways reports from 0 to 30 days behind deaths:
 
 ```{r lag_cor}
 ## Function to calculate Pearson's correlation between deaths and lagged
@@ -1042,7 +1031,7 @@ getcor2 <- possibly(getcor, otherwise = NA)
 
 getboot <- function(x) {
   result <- boot::boot.ci(boot::boot(x, getcor2, R = 1000), 
-                           type="bca")
+                          type = "bca")
   return(c(result$t0,result$bca[4:5]))
 }
 
@@ -1087,8 +1076,8 @@ cor_vs_lag
 l_opt <- which.max(lag_cor$r)
 
 dth_vs_note <- all_tot %>% 
-    mutate(note_lag = lag(count, lag_cor$lag[l_opt])) %>%
-    filter(!is.na(note_lag)) %>%
+  mutate(note_lag = lag(count, lag_cor$lag[l_opt])) %>%
+  filter(!is.na(note_lag)) %>%
   ggplot(aes(y = deaths, x = note_lag)) +
   geom_point() + 
   geom_smooth(color = "black",
@@ -1099,33 +1088,6 @@ dth_vs_note <- all_tot %>%
   large_txt
 dth_vs_note
 
-## REGIONAL ##
-lag_cor_reg <- data.frame()
-for (l in 0:30) {
-
-  temp <-
-    all_data %>%
-    group_by(nhs_region) %>%
-    mutate(note_lag = lag(count, l)) %>%
-    summarise(r = cor(deaths, note_lag,
-                      use = "complete.obs",
-                      method = "pearson"),
-              lag = l,
-              n = sum(!is.na(note_lag) & !is.na(deaths))) %>%
-    select(lag, r, n, nhs_region)
-
-  lag_cor_reg <- bind_rows(lag_cor_reg, temp)
-}
-lag_cor_reg <- lag_cor_reg[-1,]
-
-lag_cor_reg %>%
-ggplot(aes(lag, r, col = nhs_region)) +
-  geom_hline(yintercept = 0, lty = "longdash") +
-  geom_point() +
-  geom_line() +
-  theme_bw() +
-  labs(x = "Lag (days)", col = "NHS region")
-
 ```
 
 
@@ -1134,9 +1096,12 @@ ggplot(aes(lag, r, col = nhs_region)) +
 
 ## Serial interval distribution
 
+This is a comparison of gamma versus lognormal distribution for the serial
+interval used to convert r to R in our analysis. Both distributions are
+parameterised with mean 4.7 and standard deviation 2.9.
+
 ```{r fig_serialinterval, fig.width = 10}
-#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
-SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
+SI_param <- epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
                                         scale = SI_param$scale, w = 0.5)
@@ -1172,6 +1137,8 @@ ggpubr::ggarrange(SI_dist1,
 We reproduce the window analysis with either a 7 or 21 days window for sensitivity
 purposes.
 
+First with the 7 days window:
+
 ```{r sliding_model_7}
 ## set moving time window (1/2/3 weeks)
 w <- 7
@@ -1187,10 +1154,10 @@ x_model_all_moving <- x %>%
 
 unique_dates <- unique(x_model_all_moving$date)
 
-for (i in 1:(length(unique_dates)-w)){
-
+for (i in 1:(length(unique_dates) - w)) {
+  
   date_i <- unique_dates[i]
-
+  
   date_i_max <- date_i + w
   
   model_data <- x_model_all_moving %>%
@@ -1213,7 +1180,7 @@ for (i in 1:(length(unique_dates)-w)){
   
 }
 
-#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+#serial interval distribution
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
@@ -1231,7 +1198,7 @@ r_all_sliding <- r_all_sliding %>%
 ```{r all_sliding_growth_7}
 # plot
 plot_growth <-
-r_all_sliding %>%
+  r_all_sliding %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -1241,9 +1208,9 @@ r_all_sliding %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
+  guides(colour = guide_legend(title = "",override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (\u03BB)") +
+       y = "Estimated daily growth rate (r)") +
   scale_colour_manual(values = pal)
 
 ```
@@ -1293,7 +1260,7 @@ r_R_7 <- r_R %>%
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),
         strip.placement = "outside"
-        ) +
+  ) +
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
@@ -1303,8 +1270,10 @@ r_R_7 <- r_R %>%
              labeller = as_labeller(c(r = "Daily growth rate (r)",
                                       R = "Effective reproduction\nnumber (Re)")))
 
-  
+
 ```
+
+Then with the 21 days window:
 
 ```{r sliding_model_21}
 ## set moving time window (1/2/3 weeks)
@@ -1321,10 +1290,10 @@ x_model_all_moving <- x %>%
 
 unique_dates <- unique(x_model_all_moving$date)
 
-for (i in 1:(length(unique_dates)-w)){
-
+for (i in 1:(length(unique_dates) - w)) {
+  
   date_i <- unique_dates[i]
-
+  
   date_i_max <- date_i + w
   
   model_data <- x_model_all_moving %>%
@@ -1347,7 +1316,7 @@ for (i in 1:(length(unique_dates)-w)){
   
 }
 
-#mean & SD from https://epiforecasts.io/covid/methods.html#estimating-the-time-varying-reproduction-number
+#serial interval distribution
 SI_param = epitrix::gamma_mucv2shapescale(4.7, 2.9/4.7)
 SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         shape = SI_param$shape,
@@ -1365,7 +1334,7 @@ r_all_sliding <- r_all_sliding %>%
 ```{r all_sliding_growth_21}
 # plot
 plot_growth <-
-r_all_sliding %>%
+  r_all_sliding %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -1375,9 +1344,9 @@ r_all_sliding %>%
   scale_weeks +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0.5,0.5, "cm")) +
-  guides(colour = guide_legend(title = "",override.aes=list(fill=NA)), fill = FALSE) +
+  guides(colour = guide_legend(title = "",override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "",
-       y = "Estimated daily growth rate (\u03BB)") +
+       y = "Estimated daily growth rate (r)") +
   scale_colour_manual(values = pal)
 
 ```
@@ -1385,7 +1354,7 @@ r_all_sliding %>%
 ```{r all_sliding_R_21}
 # plot
 plot_R <-
-r_all_sliding %>%
+  r_all_sliding %>%
   ggplot(aes(x = w_max, y = R)) +
   geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -1429,7 +1398,7 @@ r_R_21 <- r_R %>%
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),
         strip.placement = "outside"
-        ) +
+  ) +
   guides(color = guide_legend(title = "", override.aes = list(fill = NA)), fill = FALSE) +
   labs(x = "", y = "") +
   scale_colour_manual(values = pal) +
@@ -1438,8 +1407,10 @@ r_R_21 <- r_R %>%
              switch = "y",
              labeller = as_labeller(c(r = "Daily growth rate (r)",
                                       R = "Effective reproduction\nnumber (Re)")))
-  
+
 ```
+
+And we combine both outputs into a single plot:
 
 ```{r fig_sensitivity_window, fig.height = 8} 
 
@@ -1461,6 +1432,7 @@ ggpubr::ggarrange(r_R_7,
 
 # Export data {.tabset .tabset-fade .tabset-pills}
 
+We save the tables created during our analysis:
 
 ```{r exports}
 
