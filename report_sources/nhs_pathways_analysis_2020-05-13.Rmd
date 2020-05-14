@@ -1182,7 +1182,7 @@ First with the 7 days window:
 w <- 7
 
 # create empty df
-r_all_sliding <- NULL
+r_all_sliding_7days <- NULL
 
 ## make data for model
 x_model_all_moving <- x %>%
@@ -1214,7 +1214,7 @@ for (i in 1:(length(unique_dates) - w)) {
   r$w_max <- date_i_max
   
   # combine all estimates
-  r_all_sliding <- bind_rows(r_all_sliding, r)
+  r_all_sliding_7days <- bind_rows(r_all_sliding_7days, r)
   
 }
 
@@ -1226,7 +1226,7 @@ SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         w = 0.5)
 
 #convert growth rates r to R0
-r_all_sliding <- r_all_sliding %>%
+r_all_sliding_7days <- r_all_sliding_7days %>%
   mutate(R = epitrix::r2R0(r, SI_distribution),
          R_lower_95 = epitrix::r2R0(lower_95, SI_distribution),
          R_upper_95 = epitrix::r2R0(upper_95, SI_distribution))
@@ -1236,7 +1236,7 @@ r_all_sliding <- r_all_sliding %>%
 ```{r all_sliding_growth_7}
 # plot
 plot_growth <-
-  r_all_sliding %>%
+  r_all_sliding_7days %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -1254,7 +1254,7 @@ plot_growth <-
 ```
 
 ```{r all_sliding_R_7}
-plot_R <- r_all_sliding %>%
+plot_R <- r_all_sliding_7days %>%
   ggplot(aes(x = w_max, y = R)) +
   geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -1273,14 +1273,14 @@ plot_R <- r_all_sliding %>%
 
 ```{r fig2_3_7}
 
-R <- r_all_sliding %>%
+R <- r_all_sliding_7days %>%
   mutate(lower_95 = R_lower_95, 
          upper_95 = R_upper_95,
          value = R,
          measure = "R",
          reference = 1)
 
-r_R <- r_all_sliding %>%
+r_R <- r_all_sliding_7days %>%
   mutate(measure = "r",
          value = r,
          reference = 0) %>%
@@ -1318,7 +1318,7 @@ Then with the 21 days window:
 w <- 21
 
 # create empty df
-r_all_sliding <- NULL
+r_all_sliding_21days <- NULL
 
 ## make data for model
 x_model_all_moving <- x %>%
@@ -1350,7 +1350,7 @@ for (i in 1:(length(unique_dates) - w)) {
   r$w_max <- date_i_max
   
   # combine all estimates
-  r_all_sliding <- bind_rows(r_all_sliding, r)
+  r_all_sliding_21days <- bind_rows(r_all_sliding_21days, r)
   
 }
 
@@ -1362,7 +1362,7 @@ SI_distribution <- distcrete::distcrete("gamma", interval = 1,
                                         w = 0.5)
 
 #convert growth rates r to R0
-r_all_sliding <- r_all_sliding %>%
+r_all_sliding_21days <- r_all_sliding_21days %>%
   mutate(R = epitrix::r2R0(r, SI_distribution),
          R_lower_95 = epitrix::r2R0(lower_95, SI_distribution),
          R_upper_95 = epitrix::r2R0(upper_95, SI_distribution))
@@ -1372,7 +1372,7 @@ r_all_sliding <- r_all_sliding %>%
 ```{r all_sliding_growth_21}
 # plot
 plot_growth <-
-  r_all_sliding %>%
+  r_all_sliding_21days %>%
   ggplot(aes(x = w_max, y = r)) +
   geom_ribbon(aes(ymin = lower_95, ymax = upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -1392,7 +1392,7 @@ plot_growth <-
 ```{r all_sliding_R_21}
 # plot
 plot_R <-
-  r_all_sliding %>%
+  r_all_sliding_21days %>%
   ggplot(aes(x = w_max, y = R)) +
   geom_ribbon(aes(ymin = R_lower_95, ymax = R_upper_95, fill = nhs_region), alpha = 0.1) +
   geom_line(aes(colour = nhs_region)) +
@@ -1411,14 +1411,14 @@ plot_R <-
 
 ```{r fig2_3_21}
 
-R <- r_all_sliding %>%
+R <- r_all_sliding_21days %>%
   mutate(lower_95 = R_lower_95, 
          upper_95 = R_upper_95,
          value = R,
          measure = "R",
          reference = 1)
 
-r_R <- r_all_sliding %>%
+r_R <- r_all_sliding_21days %>%
   mutate(measure = "r",
          value = r,
          reference = 0) %>%
