@@ -69,6 +69,7 @@ library(cyphr)
 library(chngpt)
 library(lubridate)
 library(ggpubr)
+library(ggnewscale)
 
 ```
 
@@ -127,6 +128,9 @@ Finally, we import publically available deaths per NHS region:
 
 dth <- import_deaths() %>%
   mutate(nhs_region = str_to_title(gsub("_"," ",nhs_region)))
+
+#truncation to account for reporting delay
+delay_max <- 21
 
 dth$nhs_region <- gsub(" Of ", " of ", dth$nhs_region)
 dth$nhs_region <- gsub(" And ", " and ", dth$nhs_region)
@@ -292,21 +296,59 @@ tab_date_region_all <- x %>%
   group_by(date, nhs_region) %>%
   summarise(n = sum(count))
 
-tab_date_region_all %>%
-  ggplot(aes(x = date, y = n, color = nhs_region)) +
-  geom_line() +
-  geom_point() +
-  geom_smooth(method = "loess", span = .5, color = "black") +
-  geom_vline(xintercept = as.Date("2020-03-23"), linetype = "dashed") +
-  theme_bw() +
-  large_txt +
-  scale_weeks +
-  theme(legend.position = "bottom") +
-  rotate_x + 
-  guides(color = guide_legend(title = "", ncol = 3)) +
-  labs(x = NULL,
-       y = "Number of daily reports") +
-  scale_colour_manual(values = pal)
+dth %>%
+  mutate(trusted = case_when(date_report < max(dth$date_report)-delay_max ~ "Y",
+                             date_report >= max(dth$date_report)-delay_max ~ "N"),
+         value = "Deaths",
+         vline = max(dth$date_report) - delay_max - 1,
+         lab = "Truncated for reporting delay",
+         lab_pos_x = vline + 7,
+         lab_pos_y = 150,
+         lab_col = "darkgrey") %>%
+  rename(date = date_report,
+         n = deaths) %>%
+  bind_rows(
+    mutate(tab_date_region_all, value = "Reports", 
+           trusted = "Y",
+           vline = as.Date("2020-03-23"),
+           lab = "Start of UK lockdown",
+           lab_pos_x = vline - 6,
+           lab_pos_y = 30000,
+           lab_col = "black")
+    ) %>%
+  mutate(value = factor(value, levels = c("Reports","Deaths"))) -> dths_reports
+
+plot_dth_report <-
+  ggplot(dths_reports, aes(date, n, colour = nhs_region)) +
+  
+  # Add main points and lines, coloured by region and fade out deaths for excluded period
+    geom_point(aes(alpha = trusted)) +
+    geom_line(alpha = 0.2) +
+    geom_smooth(method = "loess", span = .5, color = "black") +
+    scale_colour_manual(values = pal) + 
+    scale_alpha_manual(values = c(0.3,1)) + 
+    guides(color = guide_legend(title = "", ncol = 3),
+           alpha = F) +
+  
+  # Add vertical markers for important dates with labels - different for each facet 
+    ggnewscale::new_scale_colour() +
+    geom_vline(aes(xintercept = vline, col = value), lty = "solid") + 
+    geom_text(aes(x = lab_pos_x, y = lab_pos_y, label = lab, col = value), size = 3) + 
+    scale_colour_manual(values = c("black","darkgrey"), guide = FALSE) + 
+  
+  # Facet by deaths and reports
+    facet_grid(rows = vars(value), scales = "free_y", switch = "y") +
+  
+  # Other formatting
+    theme_bw() +
+    large_txt +
+    scale_weeks +
+    theme(legend.position = "bottom", strip.placement = "outside") +
+    rotate_x + 
+    labs(x = NULL,
+         y = NULL)
+
+plot_dth_report
 
 tab_date_region_all %>% 
   adorn_totals() %>%
@@ -988,7 +1030,6 @@ First we join the NHS Pathways and death data, and aggregate over all England:
 
 ```{r data_agg}
 ## truncate death data for reporting delay
-delay_max <- 21
 trunc_date <- max(dth$date_report) - delay_max
 
 dth_trunc <- dth %>%
