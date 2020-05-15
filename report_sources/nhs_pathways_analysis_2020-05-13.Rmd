@@ -239,6 +239,8 @@ get_r <- function(model) {
 
 ```
 
+Functions used in the correlation analysis between NHS Pathways reports and deaths:
+
 ```{r cor_functions}
 ## Function to calculate Pearson's correlation between deaths and lagged
 ## reports. Note that `pearson` can be replaced with `spearman` for rank
@@ -308,11 +310,11 @@ age.pal <- viridis::viridis(3,begin = 0.1, end = 0.7)
 <!-- ======================================================== -->
 <!-- ======================================================== -->
 
-# Spatio-temporal trends in NHS Pathways reports {.tabset .tabset-fade .tabset-pills}
+# Temporal trends in NHS Pathways reports {.tabset .tabset-fade .tabset-pills}
 
 ## Outline
 
-We look for spatio-temporal patterns in COVID-19 related 111/999 calls and 111 
+We look for temporal patterns in COVID-19 related 111/999 calls and 111 
 online reports. Analyses are broken down by NHS region. We also look for estimates
 of recent growth rate and associated doubling / halving time.
 
@@ -1554,13 +1556,16 @@ if (!dir.exists("excel_tables")) {
 
 
 ## list all tables, and loop over export
-tables_to_export <- c("r_all_sliding")
+tables_to_export <- c("r_all_sliding", "lag_cor")
 
 for (e in tables_to_export) {
   rio::export(get(e),
               file.path("excel_tables",
                         paste0(e, ".xlsx")))
 }
+
+## also export result from regression on lagged data 
+rio::export(lag_mod, file.path("excel_tables", "lag_mod.rds"))
 
 ```
 
