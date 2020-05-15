@@ -18,12 +18,13 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,
                       collapse = TRUE,
-                      fig.width = 8,
+                      dpi = 300,
                       fig.height = 4,
-                      dpi = 150,
+                      fig.width = 8,
                       warning = FALSE,
                       message = FALSE,
-                      fig.path = "figures/nhs_paths/")
+                      fig.path = "figures/nhs_paths/",
+                      dev = c("pdf", "png"))
 ```
 
 
@@ -238,6 +239,34 @@ get_r <- function(model) {
 
 ```
 
+```{r cor_functions}
+## Function to calculate Pearson's correlation between deaths and lagged
+## reports. Note that `pearson` can be replaced with `spearman` for rank
+## correlation.
+
+getcor <- function(x, ndx) {
+  return(cor(x$deaths[ndx],
+             x$note_lag[ndx],
+             use = "complete.obs",
+             method = "pearson"))
+}
+
+## Catch if sample size throws an error
+getcor2 <- possibly(getcor, otherwise = NA)
+
+getboot <- function(x) {
+  result <- boot::boot.ci(boot::boot(x, getcor2, R = 1000), 
+                           type = "bca")
+  return(data.frame(n = sum(!is.na(x$note_lag) & !is.na(x$deaths)),
+                    r = result$t0,
+                    r_low = result$bca[4],
+                    r_hi = result$bca[5]))
+}
+
+
+
+```
+
 Function to classify the day of the week into *weekend*, *Monday*, and *the rest*:
 
 ```{r day_of_week}
@@ -268,7 +297,7 @@ pal <- c("#006212",
          "#ff7e78",
          "#00388d")
 
-blue_pal <- c("#8cb5f5","#00a1bd","#004480")
+age.pal <- viridis::viridis(3,begin = 0.1, end = 0.7)
 
 ```
 
@@ -289,7 +318,7 @@ of recent growth rate and associated doubling / halving time.
 
 ## Reports by region over time
 
-```{r all_volume, fig.height = 6}
+```{r all_volume, fig.height=6, fig.width=9}
 
 tab_date_region_all <- x %>%
   filter(!is.na(nhs_region)) %>%
@@ -300,9 +329,9 @@ dth %>%
   mutate(trusted = case_when(date_report < max(dth$date_report)-delay_max ~ "Y",
                              date_report >= max(dth$date_report)-delay_max ~ "N"),
          value = "Deaths",
-         vline = max(dth$date_report) - delay_max - 1,
+         vline = max(dth$date_report)-delay_max-1,
          lab = "Truncated for reporting delay",
-         lab_pos_x = vline + 7,
+         lab_pos_x = vline + 8,
          lab_pos_y = 150,
          lab_col = "darkgrey") %>%
   rename(date = date_report,
@@ -325,25 +354,23 @@ plot_dth_report <-
     geom_point(aes(alpha = trusted)) +
     geom_line(alpha = 0.2) +
     geom_smooth(method = "loess", span = .5, color = "black") +
-    scale_colour_manual(values = pal) + 
+    scale_colour_manual("", values = pal) + 
     scale_alpha_manual(values = c(0.3,1)) + 
-    guides(color = guide_legend(title = "", ncol = 3),
-           alpha = F) +
+    guides(alpha = F) +
   
   # Add vertical markers for important dates with labels - different for each facet 
     ggnewscale::new_scale_colour() +
     geom_vline(aes(xintercept = vline, col = value), lty = "solid") + 
-    geom_text(aes(x = lab_pos_x, y = lab_pos_y, label = lab, col = value), size = 3) + 
-    scale_colour_manual(values = c("black","darkgrey"), guide = FALSE) + 
+    geom_text(aes(x = lab_pos_x, y = lab_pos_y, label = lab, col = value), size = 3) +
+    scale_colour_manual("",values = c("black","darkgrey"), guide = F) + 
   
   # Facet by deaths and reports
     facet_grid(rows = vars(value), scales = "free_y", switch = "y") +
   
   # Other formatting
     theme_bw() +
-    large_txt +
     scale_weeks +
-    theme(legend.position = "bottom", strip.placement = "outside") +
+    theme(legend.position = "bottom",strip.placement = "outside") +
     rotate_x + 
     labs(x = NULL,
          y = NULL)
@@ -377,7 +404,7 @@ tab_date_region_age_all <- x %>%
 tab_date_region_age_all %>%
   ggplot(aes(x = date, y = n, fill = age)) +
   geom_col(position = "stack") +
-  scale_fill_manual(values = blue_pal) +
+  scale_fill_manual(values = age.pal) +
   theme_bw() +
   scale_weeks +
   theme(legend.position = "bottom",
@@ -396,7 +423,7 @@ tab_date_region_age_all <- tab_date_region_age_all %>%
 
 tab_date_region_age_all %>%
   ggplot(aes(x = date, y = prop_n, color = age)) +
-  scale_color_manual(values = blue_pal) +
+  scale_color_manual(values = age.pal) +
   geom_line() +
   geom_point() +
   geom_hline(data = nhs_region_pop, aes(yintercept = value, color = variable)) +
@@ -1056,50 +1083,18 @@ all_tot <- all_data %>%
 We calculate correlation with lagged NHS Pathways reports from 0 to 30 days behind deaths:
 
 ```{r lag_cor}
-## Function to calculate Pearson's correlation between deaths and lagged
-## reports. Note that `pearson` can be replaced with `spearman` for rank
-## correlation.
-
-getcor <- function(x, ndx) {
-  return(cor(x$deaths[ndx],
-             x$note_lag[ndx],
-             use = "complete.obs",
-             method = "pearson"))
-}
-
-## Catch if sample size throws an error
-getcor2 <- possibly(getcor, otherwise = NA)
-
-getboot <- function(x) {
-  result <- boot::boot.ci(boot::boot(x, getcor2, R = 1000), 
-                          type = "bca")
-  return(c(result$t0,result$bca[4:5]))
-}
-
-
 
 ## Calculate all correlations + bootstrap CIs
 lag_cor <- data.frame()
 for (i in 0:30) {
   
-  boot <- NULL
-  boot_ci <- NULL
-  
   ## lag reports
-  temp <- all_tot %>% 
-    mutate(note_lag = lag(count, i)) 
-  
-  ## calculate bootstrap CI for rank correlation
-  boot <- getboot(temp)
-  
-  temp %>%
-    summarise(r = boot[1],
-              r_low = boot[2],
-              r_hi = boot[3],
-              lag = i,
-              n = sum(!is.na(note_lag) & !is.na(deaths))) %>%
-    select(lag, r,r_low, r_hi, n) -> summary
-  
+  summary <- all_tot %>% 
+    mutate(note_lag = lag(count, i)) %>%
+    ## calculate rank correlation and bootstrap CI
+    getboot(.) %>%
+    mutate(lag = i)
+
   lag_cor <- bind_rows(lag_cor, summary)
 }
 
@@ -1115,6 +1110,7 @@ cor_vs_lag <- ggplot(lag_cor, aes(lag, r)) +
 cor_vs_lag
 
 l_opt <- which.max(lag_cor$r)
+
 
 
 ```
@@ -1504,35 +1500,39 @@ ggpubr::ggarrange(r_R_7,
 
 ## Correlation between NHS Pathways reports and deaths by NHS region
 
-```{r}
+```{r lag_cor_reg}
 
 lag_cor_reg <- data.frame()
 
-for (l in 0:30) {
+for (i in 0:30) {
 
-  temp <-
+  summary <-
     all_data %>%
     group_by(nhs_region) %>%
-    mutate(note_lag = lag(count, l)) %>%
-    summarise(r = cor(deaths, note_lag,
-                      use = "complete.obs",
-                      method = "pearson"),
-              lag = l,
-              n = sum(!is.na(note_lag) & !is.na(deaths))) %>%
-    select(lag, r, n, nhs_region)
-
-  lag_cor_reg <- bind_rows(lag_cor_reg, temp)
+    mutate(note_lag = lag(count, i)) %>%
+    ## calculate rank correlation and bootstrap CI for each region
+    group_modify(~getboot(.x)) %>%
+    mutate(lag = i)
+  
+  lag_cor_reg <- bind_rows(lag_cor_reg, summary)
 }
-lag_cor_reg <- lag_cor_reg[-1,]
 
+cor_vs_lag_reg <- 
 lag_cor_reg %>%
-ggplot(aes(lag, r)) +
+ggplot(aes(lag, r, col = nhs_region)) +
   geom_hline(yintercept = 0, lty = "longdash") +
+  geom_ribbon(aes(ymin = r_low, ymax = r_hi, col = NULL, fill = nhs_region), alpha = 0.2) +
   geom_point() +
   geom_line() +
+  facet_wrap(~nhs_region) +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal, guide = F) +  
   theme_bw() +
-  labs(x = "Lag (days)", col = "NHS region") +
-  facet_wrap(~nhs_region)
+  labs(x = "Lag between NHS pathways and death data (days)", y = "Pearson's correlation", col = "NHS region") +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(override.aes = list(fill = NA)))
+
+cor_vs_lag_reg
 
 ```
 

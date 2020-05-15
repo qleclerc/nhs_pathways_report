@@ -8,7 +8,8 @@ author:
 - Thibaut Jombart
 date: "`r format(Sys.time(), '%A %d %B %Y')`"
 output:
-  bookdown::pdf_document2
+  #bookdown::pdf_document2
+  md_document
 header-includes:
  \usepackage{xcolor}
  \usepackage{float}
@@ -50,6 +51,8 @@ tables_folder <- file.path(last_output_dir, "excel_tables")
 
 latest_data <- rio::import(file.path(tables_folder, "r_all_sliding.xlsx"))
 
+min_all <- which.min(latest_data$r)
+
 latest_data_grouped <- latest_data %>%
   group_by(w_max) %>%
   summarise(r = mean(r, na.rm = TRUE),
@@ -60,9 +63,9 @@ latest_data_grouped <- latest_data %>%
             halving_upper = mean(halving_t_upper_95, na.rm = TRUE),
             R = mean(R, na.rm = TRUE),
             R_lower = mean(R_lower_95, na.rm = TRUE),
-            R_upper = mean(R_upper_95, na.rm = TRUE))
+            R_upper = mean(R_upper_95, na.rm = TRUE)) %>%
+  filter(w_max == max(w_max))
 
-min_grouped <- which.min(latest_data_grouped$halving)
 
 x <- import_pathways()
 database_date <- attr(x, "timestamp")
@@ -72,6 +75,9 @@ database_date <- attr(x, "timestamp")
 <!-- ======================================================= -->
 <!-- ======================================================= -->
 <!-- ======================================================= -->
+
+
+***This is a summary of the latest trends seen in potential COVID-19 cases reported through NHS Pathways. The results presented here include data up to `r database_date`. For a full discussion of this analysis, please refer to our paper available [here](link)***
 
 
 # Introduction
@@ -90,7 +96,7 @@ While prone to self-reporting biases, it is likely to better reflect milder
 cases and be less biased by different severity profiles than hospital admission
 data, which by definition reflect the most acute cases. 
 
-Here, we analyse NHS Pathways data until 12/05/2020 to assess the temporal
+Here, we analyse NHS Pathways data until `r database_date` to assess the temporal
 dynamics of COVID-19 in England. Specifically, we investigated potential changes
 in the growth rate of the epidemic over time, and compared the observed patterns
 across NHS regions. We derived time-varying estimates of the growth rates,
@@ -127,7 +133,7 @@ over-dispersion of the data [8]. Predictors included time (in days since the
 first data point (18/03/2020)) with interaction terms for varying slopes and
 intercepts between NHS regions, and day of the week (weekend, monday, or rest of
 the week) to account for potential differences in reporting over the weekend and
-at the start of the week. Growth rates (r) for each NHS region and their 95%
+at the start of the week. Growth rates ($r$) for each NHS region and their 95%
 confidence intervals were directly deduced from the corresponding coefficients.
 All models were fitted using maximum-likelihood.
 
@@ -136,12 +142,11 @@ over rolling windows of 14 days from the earliest available date (Wednesday 18
 March 2020) to the latest available one (Tuesday 12 May 2020) (see Figure S1 in
 Supplementary Material for a sensitivity analysis). Growth rates and associated
 confidence intervals were calculated for each time window. Whenever the upper
-bound of r was negative, corresponding halving times were calculated as
-log(0.5)/r. Growth rates were converted to effective reproduction numbers Re
+bound of $r$ was negative, corresponding halving times were calculated as
+$log(0.5)/r$. Growth rates were converted to effective reproduction numbers $R_e$
 using the approach described in Wallinga and Lipsitch [9] and implemented in the
 epitrix package [10], with a serial interval modelled as a gamma distribution
-with mean 4.7 days and standard deviation 2.9 days [11] (see Figure S2 in
-Supplementary Material for further details on the choice of distribution).
+with mean 4.7 days and standard deviation 2.9 days [11].
 
 ## Correlation with reported deaths
 
@@ -167,15 +172,16 @@ available from https://github.com/qleclerc/nhs_pathways_report and distributed
 under the MIT license.
 
 
-# Results
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
 
-Overall reports of potential COVID-19 cases through NHS Pathways have been
-clearly decreasing in all NHS regions since 18/03/2020 and until approximately
-13/04/2020, after which the trend seems to plateau (Figure 1). Weekly spikes
-were consistently observed for all NHS regions, with increased reports on Mondays
-likely reflecting less reporting over weekends. The NHS COVID-19 daily deaths
-dataset shows daily deaths increased until approximately 10/04/2020, and have
-been decreasing since.
+
+# Latest results
+
+**The results below were generated with data up to `r database_date`.**
+
+## Numbers of daily NHS Pathways report and NHS COVID-19 deaths
 
 ```{r volume, fig.cap="\\small \\textbf{Daily potential COVID-19 cases reported through NHS Pathways and reported COVID-19-related deaths, by NHS region.} Pathways data include calls to 111 and 999, as well as 111-online reports. Dates correspond to the date of case report and death report, respectively, with x-axis labels corresponding to Mondays. The solid black line and grey ribbon correspond to a lowess smoother and its 95\\% confidence interval. The start of the lockdown in England (23/03/2020) and date at which death data were truncated to avoid bias from reporting delay (20/04/202) are highlighted by vertical lines.", out.width = "70%", fig.align = "center"}
 
@@ -183,18 +189,13 @@ knitr::include_graphics(file.path(figure_folder, "all_volume-1.png"))
 
 ```
 
+## Estimates of growth rate and effective reproduction number
 
-Analyses over sliding time windows show that daily
-growth rates have likely been changing substantially during this period. Results
-show a marked decrease in growth rates ($r$) and effective reproduction numbers
-($R_e$) until the 6th April 2020, after which these numbers remained low in all
-NHS regions for a period of about two weeks (Figure \@ref(fig:estimates)). The
-lowest r estimated was for Saturday 18 April 2020 in the London region at -0.08
-(95% CI: -0.10 - -0.06), corresponding to a halving time of 8.45 days (95% CI:
-6.77 - 11.20) and an Re of 0.66 (95% CI: 0.59 - 0.73). Similar trends were
-observed across all NHS regions, with the exception of London which showed lower
-r (and Re) after the 13th of April.
+Daily estimates can be seen in Figure \@ref(fig::estimates).
 
+The lowest $r$ estimated across all NHS regions and for all available dates was on `r latest_data$w_max[min_all]` for the `r latest_data$nhs_region[min_all]` region at `r latest_data$r[min_all]`
+(95% CI: `r latest_data$lower_95[min_all]` - `r latest_data$upper_95[min_all]`), corresponding to a halving time of `r latest_data$halving_t[min_all]` days (95% CI:
+`r latest_data$halving_t_lower_95[min_all]` - `r latest_data$halving_t_upper_95[min_all]`) and an $R_e$ of `r latest_data$R[min_all]` (95% CI: `r latest_data$R_lower_95[min_all]` - `r latest_data$R_upper_95[min_all]`).
 
 
 ```{r estimates, fig.cap="\\small \\textbf{Estimates of daily growth rates (r) and effective reproduction numbers (Re) for potential COVID-19 cases reported through NHS Pathways.} Dotted lines indicate the central estimate, and ribbons their 95\\% confidence intervals. Estimates are indicated at the end of the time window used for estimation, so that values of r and Re provided on a given day correspond to the 2 weeks leading up to that day.", out.width = "70%", fig.align = "center"}
@@ -203,34 +204,26 @@ knitr::include_graphics(file.path(figure_folder, "fig2_3-1.png"))
 
 ```
 
-Confidence intervals suggest r values remained lower than 0 (and Re lower than
-1) in all regions until the 15th of April, consistent with a decrease in
-COVID-19 related reports. After this, values of r and Re seem to have gradually
-increased, to a point where there was no longer any strong evidence of a
-decrease in COVID-19 reports in any NHS region as of the 4th May 2020, as the
-95% CIs of all growth rates include 0. The most recent estimate of r averaged
-over all NHS regions is -0.05 (95% CI: -0.08 - -0.02), corresponding to an Re
-of 0.79 (95% CI: 0.68 - 0.91).
 
+The most recent estimate of $r$ averaged over all NHS regions is `r latest_data_grouped$r` (95% CI: `r latest_data_grouped$lower_95` - `r latest_data_grouped$upper_95`), corresponding to an $R_e$ of `r latest_data_grouped$R` (95% CI: `r latest_data_grouped$R_lower_95` - `r latest_data_grouped$R_upper_95`).
+
+
+## Correlation between NHS Pathways reports and deaths
+
+Figure \@ref(fig:corplot) illustrates the observed trend in correlation across all tested lags. 
 The strongest correlation between NHS Pathways reports and deaths was obtained 
-with a lag of 16 days (Pearson's correlation = 0.9; 95% CI: 0.6 - 0.99). Figure
-3 illustrates the observed trend in correlation across all tested lags. 
-Estimates become increasingly unstable for lags above 23 days as the number of 
-points within the overlapping time window becomes small (n = 3 at 30 days lag).
-There is however a clear, initially upward trend and subsequent plateau between
-16 and 19 days, after which the strength of correlation appears to decrease.
-Further analysis suggests that this correlation could potentially also be seen
-by NHS regions separately (see Figure S6 Supplementary Material for further
-details).
+with a lag of `r VAL` days (Pearson's correlation = `r VAL`; 95% CI: `r VAL` - `r VAL`). 
 
-Fitting a quasi-Poisson GLM, we found that over 85.8% of the deviance in daily
+Estimates become increasingly unstable for longer lags as the number of 
+points within the overlapping time window becomes small.
+
+Fitting a quasi-Poisson GLM, we found that over `r VAL %` of the deviance in daily
 reported deaths could potentially be explained by NHS Pathways reports 16 days
 prior, with an average of 1.87 (bootstrap 95% CI: 1.66 - 2.01) additional deaths
 for every 1,000 potential COVID-19 cases reported in NHS Pathways 16 days
 before (intercept = 412, 95% CI: 376 - 452; % increase per 1000 notifications =
 0.45, 95% CI: 0.37 - 0.53)) (Figure 4).
 
-Figure \@ref(fig:corplot)
 
 ```{r corplot, fig.cap="\\small \\textbf{Pearson's correlation between deaths and potential COVID-19 cases reported through NHS Pathways, lagged between 0 and 30 days.} 95\\% confidence intervals are calculated by bootstrapping with 1,000 replicates..", out.width = "70%", fig.align = "center"}
 
