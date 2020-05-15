@@ -1,0 +1,56 @@
+# Name of the workflow
+name: nhs-pathways-updates
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch, as well as 1200 every day
+on:
+#  push:
+#    branches: [ master ]
+#  release:
+#    types: [ published ]
+  schedule:
+    - cron:  '00 10 * * *'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+# Important: ubuntu-latest is not set up properly for R, so use macOS
+jobs:
+  update-nhs-pathways:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repos
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v1
+
+      - name: Setup pandoc
+        uses: r-lib/actions/setup-pandoc@v1
+    
+      - name: Install dependencies
+        run: |
+          Sys.setenv(R_REMOTES_NO_ERRORS_FROM_WARNINGS = "true")
+          install.packages("remotes", repos = "https://cloud.r-project.org/")
+          remotes::install_github("reconhub/reportfactory")
+          remotes::install_github("reconhub/linelist")
+          reportfactory::install_deps()
+        shell: Rscript {0}
+ 
+      - name: Compile reports
+        run: |
+          reportfactory::compile_report("clean_latest_pathways_2020-05-13.Rmd", clean_report_sources = TRUE)
+          reportfactory::compile_report("clean_latest_online_deaths_2020-05-13.Rmd", clean_report_sources = TRUE)
+          reportfactory::compile_report("nhs_pathways_analysis_2020-05-13.Rmd", clean_report_sources = TRUE)
+        shell: Rscript {0}
+        
+      - name: Commit and push files
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data
+          git add scripts
+          git commit -m "Auto-updated: new NHS pathways and death data"
+          git add report_outputs/nhs_pathways_analysis_2020-05-13 -f
+          git commit -m "Auto-updated: new NHS pathways analyses"
+          git push
