@@ -98,7 +98,7 @@ Rsq <- function(x) {
 # Introduction
 
 NHS Pathways is a triage system for public calls and online reports for medical 
-care [REF]. This system is currently being used throughout England to assist 
+care [@nhspathways]. This system is currently being used throughout England to assist 
 individuals reporting potential COVID-19 symptoms. Since the 18th of March 2020,
 data on daily phone calls and completed online assessments which have received
 a potential COVID-19 final disposition are openly available. These assessments
@@ -132,10 +132,10 @@ an early detection system.
 ## Data extraction
 
 We extracted the NHS Pathways data up to `r database_date` through the NHS Digital 
-website [REF], where they are updated daily, every weekday. The number of reports
+website [@nhspathways], where they are updated daily, every weekday. The number of reports
 are stratified by Clinical Commissioning Group (CCG), gender and age group (0-18,
 19-69 and 70-120 years old) of the patients. We mapped the CCGs to their
-corresponding NHS regions using publicly available CCG data [REF], and used this
+corresponding NHS regions using publicly available CCG data [@ccgtonhs], and used this
 geographic resolution for our analysis. All dates indicated refer to the date of
 reporting.
 
@@ -144,8 +144,8 @@ reporting.
 Total numbers of reports (including all three data sources: 111 calls, 999 calls,
 and 111-online reports) were modelled using quasi-Poisson generalised linear
 models (GLM) with log links, to account for exponential trends as well as
-over-dispersion of the data [REF]. Predictors included time (in days since the
-first data point (18/03/2020)) with interaction terms for varying slopes and
+over-dispersion of the data [@McCullagh1989]. Predictors included time (in days since the
+first data point (2020-03-18) with interaction terms for varying slopes and
 intercepts between NHS regions, and day of the week (weekend, monday, or rest of
 the week) to account for potential differences in reporting over the weekend and
 at the start of the week. Growth rates ($r$) for each NHS region and their 95%
@@ -153,22 +153,21 @@ confidence intervals were directly deduced from the corresponding coefficients.
 All models were fitted using maximum-likelihood.
 
 To assess potential changes of the growth rate over time, analyses were performed
-over rolling windows of 14 days from the earliest available date (Wednesday 18
-March 2020) to the latest available one (Tuesday 12 May 2020) (see Figure S1 in
-Supplementary Material for a sensitivity analysis). Growth rates and associated
+over rolling windows of 14 days from the earliest available date (2020-03-18)
+to the latest available one (`r database_date`). Growth rates and associated
 confidence intervals were calculated for each time window. Whenever the upper
 bound of $r$ was negative, corresponding halving times were calculated as
 $log(0.5)/r$. Growth rates were converted to effective reproduction numbers $R_e$
-using the approach described in Wallinga and Lipsitch [REF] and implemented in the
-epitrix package [REF], with a serial interval modelled as a gamma distribution
-with mean 4.7 days and standard deviation 2.9 days [REF].
+using the approach described in Wallinga and Lipsitch [@Wallinga2007] and implemented in the
+epitrix package [@epitrixcite], with a serial interval modelled as a gamma distribution
+with mean 4.7 days and standard deviation 2.9 days [@Nishiura2020].
 
 ## Correlation with reported deaths
 
 To test the validity of the NHS Pathways dataset as an early detection system, we
 compared daily total counts of reports (including all three data sources: 111
 calls, 999 calls, and 111-online reports) with publicly available NHS data on
-COVID-19 daily deaths [REF]. This dataset includes daily counts of COVID-19 deaths
+COVID-19 daily deaths [@nhsdeaths]. This dataset includes daily counts of COVID-19 deaths
 in hospitals in England NHS regions. All dates refer to the date of death. However,
 the data are subject to bias from reporting delays, with more recent counts
 excluding a proportion of deaths which have not yet been reported. To account for
@@ -182,7 +181,7 @@ which the reports correlate most strongly with subsequent deaths. We then furthe
 evaluated the potential of NHS Pathways reports lagged at this value as a
 predictor, assuming a quasi-Poisson distribution for daily deaths.
 
-All analyses were performed using the R software [REF], and the code is publicly
+All analyses were performed using the R software [@rcite], and the code is publicly
 available from https://github.com/qleclerc/nhs_pathways_report and distributed
 under the MIT license.
 
