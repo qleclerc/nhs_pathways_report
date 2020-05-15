@@ -10,6 +10,7 @@ date: "`r format(Sys.time(), '%A %d %B %Y')`"
 output:
   bookdown::pdf_document2
   #md_document
+toc: false
 header-includes:
  \usepackage{xcolor}
  \usepackage{float}
@@ -77,7 +78,12 @@ latest_data_grouped <- latest_data %>%
 latest_cor <- rio::import(file.path(tables_folder, "lag_cor.xlsx"))
 latest_reg <- rio::import(file.path(tables_folder, "lag_mod.rds"))
 
-l_opt <- which.max(lag_cor$r)
+l_opt <- which.max(latest_cor$r)
+
+Rsq <- function(x) {
+  1 - (x$deviance / x$null.deviance)
+}
+
 
 ```
 
@@ -92,7 +98,7 @@ l_opt <- which.max(lag_cor$r)
 # Introduction
 
 NHS Pathways is a triage system for public calls and online reports for medical 
-care [5]. This system is currently being used throughout England to assist 
+care [REF]. This system is currently being used throughout England to assist 
 individuals reporting potential COVID-19 symptoms. Since the 18th of March 2020,
 data on daily phone calls and completed online assessments which have received
 a potential COVID-19 final disposition are openly available. These assessments
@@ -138,7 +144,7 @@ reporting.
 Total numbers of reports (including all three data sources: 111 calls, 999 calls,
 and 111-online reports) were modelled using quasi-Poisson generalised linear
 models (GLM) with log links, to account for exponential trends as well as
-over-dispersion of the data [8]. Predictors included time (in days since the
+over-dispersion of the data [REF]. Predictors included time (in days since the
 first data point (18/03/2020)) with interaction terms for varying slopes and
 intercepts between NHS regions, and day of the week (weekend, monday, or rest of
 the week) to account for potential differences in reporting over the weekend and
@@ -153,16 +159,16 @@ Supplementary Material for a sensitivity analysis). Growth rates and associated
 confidence intervals were calculated for each time window. Whenever the upper
 bound of $r$ was negative, corresponding halving times were calculated as
 $log(0.5)/r$. Growth rates were converted to effective reproduction numbers $R_e$
-using the approach described in Wallinga and Lipsitch [9] and implemented in the
-epitrix package [10], with a serial interval modelled as a gamma distribution
-with mean 4.7 days and standard deviation 2.9 days [11].
+using the approach described in Wallinga and Lipsitch [REF] and implemented in the
+epitrix package [REF], with a serial interval modelled as a gamma distribution
+with mean 4.7 days and standard deviation 2.9 days [REF].
 
 ## Correlation with reported deaths
 
 To test the validity of the NHS Pathways dataset as an early detection system, we
 compared daily total counts of reports (including all three data sources: 111
 calls, 999 calls, and 111-online reports) with publicly available NHS data on
-COVID-19 daily deaths [12]. This dataset includes daily counts of COVID-19 deaths
+COVID-19 daily deaths [REF]. This dataset includes daily counts of COVID-19 deaths
 in hospitals in England NHS regions. All dates refer to the date of death. However,
 the data are subject to bias from reporting delays, with more recent counts
 excluding a proportion of deaths which have not yet been reported. To account for
@@ -176,7 +182,7 @@ which the reports correlate most strongly with subsequent deaths. We then furthe
 evaluated the potential of NHS Pathways reports lagged at this value as a
 predictor, assuming a quasi-Poisson distribution for daily deaths.
 
-All analyses were performed using the R software [13], and the code is publicly
+All analyses were performed using the R software [REF], and the code is publicly
 available from https://github.com/qleclerc/nhs_pathways_report and distributed
 under the MIT license.
 
@@ -221,17 +227,17 @@ The most recent estimate of $r$ averaged over all NHS regions is `r round(latest
 
 Figure \@ref(fig:corplot) illustrates the observed trend in correlation across all tested lags. 
 The strongest correlation between NHS Pathways reports and deaths was obtained 
-with a lag of `r l_opt-1` days (Pearson's correlation = `r lag_cor$r[l_opt]`; 95% CI: `r lag_cor$r_low[l_opt]` - `r lag_cor$r_hi[l_opt]`). 
+with a lag of `r l_opt-1` days (Pearson's correlation = `r round(latest_cor$r[l_opt],2)`; 95% CI: `r round(latest_cor$r_low[l_opt],2)` - `r round(latest_cor$r_hi[l_opt],2)`). 
 
 Estimates become increasingly unstable for longer lags as the number of 
 points within the overlapping time window becomes small.
 
-Fitting a quasi-Poisson GLM, we found that over `r round(Rsq(lag_mod), 3)*100`% of the deviance in daily
+Fitting a quasi-Poisson GLM, we found that over `r round(Rsq(latest_reg), 3)*100`% of the deviance in daily
 reported deaths could potentially be explained by NHS Pathways reports 16 days
-prior, with an average of 1.87 (bootstrap 95% CI: 1.66 - 2.01) additional deaths
+prior, with an average of `r round(exp(coefficients(latest_reg)[1])*coefficients(latest_reg)[2]*1000, 2)` (bootstrap 95% CI: `r round(exp(confint(latest_reg)[1])*confint(latest_reg)[2]*1000, 2)` - `r round(exp(confint(latest_reg)[3])*confint(latest_reg)[4]*1000, 2)`) additional deaths
 for every 1,000 potential COVID-19 cases reported in NHS Pathways 16 days
-before (intercept = `r round(exp(coefficients(lag_mod))[1])`, 95% CI: `r round(exp(confint(lag_mod))[1])` - `r round(exp(confint(lag_mod))[3])`; % increase per 1000 notifications =
-`r round(coefficients(lag_mod)[2]*1000, 2)`, 95% CI: `r round(confint(lag_mod)[2]*100000, 2)` - `r round(confint(lag_mod)[4]*100000, 2)`)) (Figure \@ref(fig:reportsvsdeaths)).
+before (intercept = `r round(exp(coefficients(latest_reg))[1])`, 95% CI: `r round(exp(confint(latest_reg))[1])` - `r round(exp(confint(latest_reg))[3])`; % increase per 1000 notifications =
+`r round(coefficients(latest_reg)[2]*1000, 2)`, 95% CI: `r round(confint(latest_reg)[2]*100000, 2)` - `r round(confint(latest_reg)[4]*100000, 2)`)) (Figure \@ref(fig:reportsvsdeaths)).
 
 
 ```{r corplot, fig.cap="\\small \\textbf{Pearson's correlation between deaths and potential COVID-19 cases reported through NHS Pathways, lagged between 0 and 30 days.} 95\\% confidence intervals are calculated by bootstrapping with 1,000 replicates..", out.width = "70%", fig.align = "center"}
