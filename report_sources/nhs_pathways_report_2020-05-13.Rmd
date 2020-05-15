@@ -8,8 +8,8 @@ author:
 - Thibaut Jombart
 date: "`r format(Sys.time(), '%A %d %B %Y')`"
 output:
-  #bookdown::pdf_document2
-  md_document
+  bookdown::pdf_document2
+  #md_document
 header-includes:
  \usepackage{xcolor}
  \usepackage{float}
@@ -41,6 +41,7 @@ library(reportfactory)
 ```{r load_data}
 reportfactory::rfh_load_scripts()
 
+#identify latest compilation directory
 last_output_dir <- reportfactory::filter_log(
   readRDS(here::here(".compile_log.rds")),
   file = "nhs_pathways_analysis_2020-05-13.Rmd",
@@ -49,6 +50,13 @@ last_output_dir <- reportfactory::filter_log(
 figure_folder <- file.path(last_output_dir, "figures", "nhs_paths")
 tables_folder <- file.path(last_output_dir, "excel_tables")
 
+
+#load most recent NHS Pathways date
+x <- import_pathways()
+database_date <- attr(x, "timestamp")
+
+
+#load results from latest data
 latest_data <- rio::import(file.path(tables_folder, "r_all_sliding.xlsx"))
 
 min_all <- which.min(latest_data$r)
@@ -66,9 +74,10 @@ latest_data_grouped <- latest_data %>%
             R_upper = mean(R_upper_95, na.rm = TRUE)) %>%
   filter(w_max == max(w_max))
 
+latest_cor <- rio::import(file.path(tables_folder, "lag_cor.xlsx"))
+latest_reg <- rio::import(file.path(tables_folder, "lag_mod.rds"))
 
-x <- import_pathways()
-database_date <- attr(x, "timestamp")
+l_opt <- which.max(lag_cor$r)
 
 ```
 
@@ -191,38 +200,38 @@ knitr::include_graphics(file.path(figure_folder, "all_volume-1.png"))
 
 ## Estimates of growth rate and effective reproduction number
 
-Daily estimates can be seen in Figure \@ref(fig::estimates).
+Daily estimates can be seen in Figure \@ref(fig:estimates).
 
-The lowest $r$ estimated across all NHS regions and for all available dates was on `r latest_data$w_max[min_all]` for the `r latest_data$nhs_region[min_all]` region at `r latest_data$r[min_all]`
-(95% CI: `r latest_data$lower_95[min_all]` - `r latest_data$upper_95[min_all]`), corresponding to a halving time of `r latest_data$halving_t[min_all]` days (95% CI:
-`r latest_data$halving_t_lower_95[min_all]` - `r latest_data$halving_t_upper_95[min_all]`) and an $R_e$ of `r latest_data$R[min_all]` (95% CI: `r latest_data$R_lower_95[min_all]` - `r latest_data$R_upper_95[min_all]`).
+The lowest $r$ estimated across all NHS regions and for all available dates was on `r latest_data$w_max[min_all]` for the `r latest_data$nhs_region[min_all]` region at `r round(latest_data$r[min_all],3)`
+(95% CI: `r round(latest_data$lower_95[min_all],3)` - `r round(latest_data$upper_95[min_all],3)`), corresponding to a halving time of `r round(latest_data$halving_t[min_all],3)` days (95% CI:
+`r round(latest_data$halving_t_lower_95[min_all],3)` - `r round(latest_data$halving_t_upper_95[min_all],3)`) and an $R_e$ of `r round(latest_data$R[min_all],3)` (95% CI: `r round(latest_data$R_lower_95[min_all],3)` - `r round(latest_data$R_upper_95[min_all],3)`).
 
 
-```{r estimates, fig.cap="\\small \\textbf{Estimates of daily growth rates (r) and effective reproduction numbers (Re) for potential COVID-19 cases reported through NHS Pathways.} Dotted lines indicate the central estimate, and ribbons their 95\\% confidence intervals. Estimates are indicated at the end of the time window used for estimation, so that values of r and Re provided on a given day correspond to the 2 weeks leading up to that day.", out.width = "70%", fig.align = "center"}
+```{r estimates, fig.cap="\\small \\textbf{Estimates of daily growth rates ($r$) and effective reproduction numbers ($R_e$) for potential COVID-19 cases reported through NHS Pathways.} Dotted lines indicate the central estimate, and ribbons their 95\\% confidence intervals. Estimates are indicated at the end of the time window used for estimation, so that values of $r$ and $R_e$ provided on a given day correspond to the 2 weeks leading up to that day.", out.width = "70%", fig.align = "center"}
 
 knitr::include_graphics(file.path(figure_folder, "fig2_3-1.png"))
 
 ```
 
 
-The most recent estimate of $r$ averaged over all NHS regions is `r latest_data_grouped$r` (95% CI: `r latest_data_grouped$lower_95` - `r latest_data_grouped$upper_95`), corresponding to an $R_e$ of `r latest_data_grouped$R` (95% CI: `r latest_data_grouped$R_lower_95` - `r latest_data_grouped$R_upper_95`).
+The most recent estimate of $r$ averaged over all NHS regions is `r round(latest_data_grouped$r,3)` (95% CI: `r round(latest_data_grouped$r_lower,3)` - `r round(latest_data_grouped$r_upper,3)`), corresponding to an $R_e$ of `r round(latest_data_grouped$R,3)` (95% CI: `r round(latest_data_grouped$R_lower,3)` - `r round(latest_data_grouped$R_upper,3)`).
 
 
 ## Correlation between NHS Pathways reports and deaths
 
 Figure \@ref(fig:corplot) illustrates the observed trend in correlation across all tested lags. 
 The strongest correlation between NHS Pathways reports and deaths was obtained 
-with a lag of `r VAL` days (Pearson's correlation = `r VAL`; 95% CI: `r VAL` - `r VAL`). 
+with a lag of `r l_opt-1` days (Pearson's correlation = `r lag_cor$r[l_opt]`; 95% CI: `r lag_cor$r_low[l_opt]` - `r lag_cor$r_hi[l_opt]`). 
 
 Estimates become increasingly unstable for longer lags as the number of 
 points within the overlapping time window becomes small.
 
-Fitting a quasi-Poisson GLM, we found that over `r VAL %` of the deviance in daily
+Fitting a quasi-Poisson GLM, we found that over `r round(Rsq(lag_mod), 3)*100`% of the deviance in daily
 reported deaths could potentially be explained by NHS Pathways reports 16 days
 prior, with an average of 1.87 (bootstrap 95% CI: 1.66 - 2.01) additional deaths
 for every 1,000 potential COVID-19 cases reported in NHS Pathways 16 days
-before (intercept = 412, 95% CI: 376 - 452; % increase per 1000 notifications =
-0.45, 95% CI: 0.37 - 0.53)) (Figure 4).
+before (intercept = `r round(exp(coefficients(lag_mod))[1])`, 95% CI: `r round(exp(confint(lag_mod))[1])` - `r round(exp(confint(lag_mod))[3])`; % increase per 1000 notifications =
+`r round(coefficients(lag_mod)[2]*1000, 2)`, 95% CI: `r round(confint(lag_mod)[2]*100000, 2)` - `r round(confint(lag_mod)[4]*100000, 2)`)) (Figure \@ref(fig:reportsvsdeaths)).
 
 
 ```{r corplot, fig.cap="\\small \\textbf{Pearson's correlation between deaths and potential COVID-19 cases reported through NHS Pathways, lagged between 0 and 30 days.} 95\\% confidence intervals are calculated by bootstrapping with 1,000 replicates..", out.width = "70%", fig.align = "center"}
@@ -231,9 +240,8 @@ knitr::include_graphics(file.path(figure_folder, "lag_cor-1.png"))
 
 ```
 
-Figure \@ref(fig:reportsvsdeaths)
 
-```{r reportsvsdeaths, fig.cap="\\small \\textbf{Daily total COVID-19 deaths reported in England between 03/04 and 21/04, against the number of potential COVID-19 cases reported through NHS Pathways with a lag of 16 days (between 18/03 and 05/04).} The black line and grey ribbon correspond to predictions from the regression model and associated 95\\% confidence intervals. The coefficient of determination indicates that 85.8\\% of the deviance in reported deaths is linearly explained by NHS Pathways reports.", out.width = "70%", fig.align = "center"}
+```{r reportsvsdeaths, fig.cap="\\small \\textbf{Daily total COVID-19 deaths reported in England, against the number of potential COVID-19 cases reported through NHS Pathways with a lag of 16 days.} The black line and grey ribbon correspond to predictions from the regression model and associated 95\\% confidence intervals.", out.width = "70%", fig.align = "center"}
 
 knitr::include_graphics(file.path(figure_folder, "regress-1.png"))
 
