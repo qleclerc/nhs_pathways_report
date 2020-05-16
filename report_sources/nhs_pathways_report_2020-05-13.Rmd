@@ -3,7 +3,7 @@ title: "Analysis of temporal trends in potential COVID-19 cases reported through
 author: 
 - Quentin J. Leclerc
 - Emily S. Nightingale
-- Samuel Abbott
+- Sam Abbott
 - CMMID COVID-19 Working Group
 - Thibaut Jombart
 date: "`r format(Sys.time(), '%A %d %B %Y')`"
@@ -30,7 +30,6 @@ knitr::opts_chunk$set(echo = FALSE,
 library(rio)
 library(dplyr)
 library(ggplot2)
-library(sf)
 library(knitr)
 library(kableExtra)
 library(bookdown)
