@@ -82,7 +82,7 @@ Rsq <- function(x) {
 ```{r comment=NA} 
 cat("---
 title: Analysis of temporal trends in potential COVID-19 cases reported through NHS Pathways England
-description: We analyse publicly available data on self-reported COVID-19 symptoms
+description: We analyse publicly available data on self-reported COVID-19 symptoms and deaths in England
 tags: transmission-dynamics
 status: real-time-report
 update: 2020-05-16

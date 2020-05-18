@@ -176,3 +176,6 @@ reportfactory::compile_report("clean_latest_deaths_2020-05-13.Rmd")
 <img src="data/images/line_bubbles.png" alt="line">
 
 
+### License
+
+This work is distributed under MIT License (see LICENSE file).
