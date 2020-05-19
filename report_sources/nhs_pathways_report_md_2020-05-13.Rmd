@@ -85,8 +85,8 @@ title: Analysis of temporal trends in potential COVID-19 cases reported through 
 description: We analyse publicly available data on self-reported COVID-19 symptoms and deaths in England
 tags: transmission-dynamics
 status: real-time-report
-update: 2020-05-16
-authors:
+update:", as.character(database_date+1),
+"\nauthors:
   - id: quentin_leclerc
     equal: 1
   - id: emily_nightingale
@@ -261,6 +261,19 @@ predictor, assuming a quasi-Poisson distribution for daily deaths.
 All analyses were performed using the R software [@rcite], and the code is publicly
 available from https://github.com/qleclerc/nhs_pathways_report and distributed
 under the MIT license.
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+## Limitations
+
+A number of caveats may affect our results. Firstly, the data we considered are at best a proxy for the true incidence of COVID-19 in the country as they rely on self-reported symptoms interpreted by an algorithm, and were not confirmed by virological tests. This is further exacerbated by the fact that individuals might access NHS Pathways more than once to report their symptoms, which could artificially increase the numbers of potential COVID-19 cases. 
+
+As NHS Pathways is based on self-reporting, several biases could affect the data, such as changes in service availability and delays in the uptake of the 111-online reporting system. When estimating growth rates over time and geographic regions, we implicitly assume that self-reporting behaviours have not substantially changed over time, and have been similar across different NHS regions. In reality, self-reporting could be strongly biased by behavioural issues, such as the effect of news coverage which might lead individuals to pay more attention to their symptoms and report them. Inversely, individuals could reduce their perception of the risk of the disease over time as they become used to hearing about it daily, which would decrease their likelihood of noticing and reporting symptoms. Similarly, differences in self-reporting behaviours across various age groups would likely bias the age composition of the potential COVID-19 cases reported here.
+
+While NHS Pathways data may better capture the epidemic in the community than hospitalisation data, these data do not only reflect community cases. In fact, a fraction of cases reported through 999 are likely to be hospitalised, as well as smaller proportions of cases reported through 111 calls and 111-online. Therefore, the data we considered here most likely reflect the epidemic as a whole, rather than just in the community. We also note that all results presented rely on dates of calls or online reports, so that estimates of transmissibility are likely lagged by a few days compared to the true, underlying epidemic. Unfortunately, the delays from exposure to notification through NHS Pathways cannot be estimated from current publicly available data.
 
 
 <!-- ======================================================= -->
