@@ -39,9 +39,9 @@ jobs:
  
       - name: Compile reports
         run: |
-          reportfactory::compile_report("clean_latest_pathways_2020-05-13.Rmd", clean_report_sources = TRUE)
-          reportfactory::compile_report("clean_latest_online_deaths_2020-05-13.Rmd", clean_report_sources = TRUE)
-          reportfactory::compile_report("nhs_pathways_analysis_2020-05-13.Rmd", clean_report_sources = TRUE)
+          reportfactory::compile_report("clean_latest_pathways_2020-05-13.Rmd")
+          reportfactory::compile_report("clean_latest_online_deaths_2020-05-13.Rmd")
+          reportfactory::compile_report("nhs_pathways_analysis_2020-05-13.Rmd")
         shell: Rscript {0}
         
       - name: Commit and push files
