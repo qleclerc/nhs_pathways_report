@@ -104,7 +104,7 @@ update:", as.character(database_date+1),
 <!-- ======================================================= -->
 
 
-***This is a summary of the latest trends seen in potential COVID-19 cases reported through NHS Pathways. The results presented here include data up to `r database_date`. For a full discussion of this analysis, please refer to our paper available [here](link)***
+***This is a summary of the latest trends seen in potential COVID-19 cases reported through NHS Pathways. The results presented here include data up to `r database_date`. For a full discussion of this analysis, please refer to our paper available [here](https://www.medrxiv.org/content/10.1101/2020.05.16.20103820v1)***
 
 
 ## Introduction

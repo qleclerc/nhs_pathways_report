@@ -71,7 +71,7 @@ These scripts will load:
 
 ```{r load_scripts}
 
-rfh_load_scripts()
+reportfactory::rfh_load_scripts()
 
 ```
 
@@ -209,7 +209,7 @@ We copy these files to the `data/rds` folder:
 ## copy some files into `data/rds`
 
 ## provide the destination of where to copy the data
-destination <- here("data",
+destination <- here::here("data",
                     "rds",
                     rds_file_name)
 ## copy the rds data
@@ -218,7 +218,7 @@ file.copy(from = file.path("produced_rds", rds_file_name),
           overwrite = TRUE)
 
 ## copy to the generic 'latest' data file
-destination <- here("data",
+destination <- here::here("data",
                     "rds",
                     "deaths_latest.rds")
 file.copy(from = file.path("produced_rds", rds_file_name),
