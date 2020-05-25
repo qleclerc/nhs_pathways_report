@@ -16,6 +16,10 @@ fetch_url_online_deaths <- function() {
   query_url <- "COVID-19-total-announced-deaths"
   url <- grep(query_url, scraped_urls, value = T)
   
-  url
+  #2nd query to ignore new weekly file and only take summary
+  query_url2 <- "2020.xlsx"
+  url2 <- grep(query_url2, url, value = T)
+  
+  url2
 }
 

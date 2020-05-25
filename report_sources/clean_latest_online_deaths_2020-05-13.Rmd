@@ -100,7 +100,7 @@ We load the data:
 
 #import the data
 online_deaths_raw <- rio::import(current_online_deaths,
-                                 sheet = "COVID19 total deaths by region",
+                                 sheet = "Tab1 Deaths by region",
                                  skip = 14,
                                  guess_max = 1e5)
 
