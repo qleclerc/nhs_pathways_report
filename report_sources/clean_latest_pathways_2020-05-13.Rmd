@@ -200,7 +200,7 @@ head(pathways_all)
 
 ## Add variables
 
-We also add NHS regions to the data:
+We also NHS regions to the data:
 
 ```{r add_nhs}
 
@@ -218,6 +218,32 @@ head(pathways_all)
 
 ```
 
+We also add 
+
+```{r add_days}
+
+#function to assign custom day of the week to dates
+day_of_week <- function(date) {
+  day_of_week <- weekdays(date)
+  out <- dplyr::case_when(
+    day_of_week %in% c("Saturday", "Sunday") ~ "weekend",
+    day_of_week %in% c("Monday") ~ "monday",
+    TRUE ~ "rest_of_week"
+  )
+  out <- factor(out, levels = c("rest_of_week", "monday", "weekend"))
+  out
+}
+
+pathways_all <- as_tibble(pathways_all) %>%
+  mutate(nhs_region = stringr::str_to_title(gsub("_", " ", nhs_region)),
+         nhs_region = gsub(" Of ", " of ", nhs_region),
+         nhs_region = gsub(" And ", " and ", nhs_region),
+         day = as.integer(date - min(date, na.rm = TRUE)),
+         weekday = day_of_week(date))
+
+head(pathways_all)
+
+```
 
 ## Add timestamp
 

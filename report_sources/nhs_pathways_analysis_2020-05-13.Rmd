@@ -154,27 +154,6 @@ The **completion date** of the NHS Pathways data is
 **`r format(database_date, format = "%A %d %b %Y")`**.
 
 
-
-
-## Add variables
-
-We add the following variable:
-
-* `day`: an integer representing the number of days from the earliest data
-reported, used for modelling purposes; the first day is 0
-
-```{r add_variables}
-
-x <- x %>% 
-  mutate(nhs_region = str_to_title(gsub("_"," ",nhs_region)),
-         nhs_region = gsub(" Of ", " of ", nhs_region),
-         nhs_region = gsub(" And ", " and ", nhs_region),
-         day = as.integer(date - min(date, na.rm = TRUE)))
-
-```
-
-
-
 ## Auxiliary functions
 
 These are functions which will be used further in the analyses.
