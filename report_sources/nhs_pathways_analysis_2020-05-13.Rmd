@@ -312,7 +312,7 @@ dth %>%
          value = "Deaths",
          vline = max(dth$date_report)-delay_max-1,
          lab = "Truncated for reporting delay",
-         lab_pos_x = vline + 8,
+         lab_pos_x = vline + 10,
          lab_pos_y = 150,
          lab_col = "darkgrey") %>%
   rename(date = date_report,
@@ -322,8 +322,8 @@ dth %>%
            trusted = "Y",
            vline = as.Date("2020-03-23"),
            lab = "Start of UK lockdown",
-           lab_pos_x = vline - 6,
-           lab_pos_y = 30000,
+           lab_pos_x = vline - 8,
+           lab_pos_y = 30200,
            lab_col = "black")
     ) %>%
   mutate(value = factor(value, levels = c("Reports","Deaths"))) -> dths_reports
@@ -546,6 +546,7 @@ r_R %>%
   geom_hline(aes(yintercept = reference), linetype = "dashed") +
   theme_bw() +
   scale_weeks +
+  rotate_x +
   theme(legend.position = "bottom",
         plot.margin = margin(0.5,1,0,0, "cm"),
         strip.background = element_blank(),

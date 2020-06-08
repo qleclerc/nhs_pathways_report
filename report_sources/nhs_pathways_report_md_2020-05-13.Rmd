@@ -79,25 +79,6 @@ Rsq <- function(x) {
 
 ```
 
-```{r comment=NA} 
-cat("---
-title: Analysis of temporal trends in potential COVID-19 cases reported through NHS Pathways England
-description: We analyse publicly available data on self-reported COVID-19 symptoms and deaths in England
-tags: transmission-dynamics
-status: real-time-report
-update:", as.character(database_date+1),
-"\nauthors:
-  - id: quentin_leclerc
-    equal: 1
-  - id: emily_nightingale
-    equal: 1
-  - id: sam_abbott
-  - id: ncov-group
-  - id: thibaut_jombart
----")
-
-```
-
 
 <!-- ======================================================= -->
 <!-- ======================================================= -->
@@ -149,7 +130,7 @@ an early detection system.
 <br>
 
 <img src="figures/nhs_paths/all_volume-1.png" width="70%" style="display: block; margin: auto;" />
-***Figure 1. Daily potential COVID-19 cases reported through NHS Pathways and reported COVID-19-related deaths, by NHS region.*** *Pathways data include calls to 111 and 999, as well as 111-online reports. Dates correspond to the date of case report and death report, respectively, with x-axis labels corresponding to Mondays. The solid black line and grey ribbon correspond to a lowess smoother and its 95% confidence interval. The start of the lockdown in England (23/03/2020) and date at which death data were truncated to avoid bias from reporting delay (20/04/202) are highlighted by vertical lines.*
+***Figure 1. Daily potential COVID-19 cases reported through NHS Pathways and reported COVID-19-related deaths, by NHS region.*** *Pathways data include calls to 111 and 999, as well as 111-online reports. Dates correspond to the date of case report and death report, respectively, with x-axis labels corresponding to Mondays. The solid black line and grey ribbon correspond to a lowess smoother and its 95% confidence interval. The start of the lockdown in England (2020-03-23) and date at which death data were truncated to avoid bias from reporting delay (`r database_date - 21`) are highlighted by vertical lines.*
 
 <br>
 
