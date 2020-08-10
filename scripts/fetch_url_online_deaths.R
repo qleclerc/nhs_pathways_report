@@ -17,7 +17,7 @@ fetch_url_online_deaths <- function() {
   url <- grep(query_url, scraped_urls, value = T)
   
   #2nd query to ignore new weekly file and only take summary
-  query_url2 <- "weekly-table"
+  query_url2 <- "weekly-file"
   url2 <- grep(query_url2, url, value = T, invert = T)
   
   url2
