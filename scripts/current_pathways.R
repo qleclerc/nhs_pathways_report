@@ -1,8 +1,8 @@
 ## This file is generated automatically by `clean_latest_pathways`
 ## Do not edit it by hand!
 
-## This file was last updated on the: 2020-08-19 10:17:23
+## This file was last updated on the: 2020-08-20 17:29:48
 
 current_pathways <- here::here("data",
                                  "rds",
-                                 "pathways_2020-08-18.rds")
+                                 "pathways_2020-08-19.rds")
