@@ -103,8 +103,8 @@ We load the data:
 #import the data
 online_deaths_raw <- rio::import(current_online_deaths,
                                  sheet = "Tab1 Deaths by region",
-                                 skip = 14,
-                                 guess_max = 1e5)
+                                 skip = 13,
+                                 guess_max = 1e5)[-1,]
 
 ```
 
