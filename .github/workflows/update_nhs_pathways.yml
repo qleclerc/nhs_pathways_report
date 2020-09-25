@@ -36,7 +36,7 @@ jobs:
           "knitr", "tinytex", "withr", "checkpoint")
           install.packages(pkgs, repos = "https://cloud.r-project.org/")
           remotes::install_github("reconhub/reportfactory", dependencies = F)
-          remotes::install_github("reconhub/linelist", dependencies = F)
+          remotes::install_github("reconhub/linelist", dependencies = T)
           reportfactory::install_deps()
         shell: Rscript {0}
  
