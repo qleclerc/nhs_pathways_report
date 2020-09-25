@@ -4,7 +4,7 @@ name: nhs-pathways-updates
 # Controls when the action will run. Triggers the workflow on push or pull request
 # events but only for the master branch, as well as 1200 every day
 on:
-  workflow_dispatch
+  workflow_dispatch:
 #  push:
 #    branches: [ master ]
 #  release:
