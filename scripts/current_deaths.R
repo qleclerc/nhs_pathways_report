@@ -1,8 +1,8 @@
 ## This file is generated automatically by `clean_latest_online_deaths`
 ## Do not edit it by hand!
 
-## This file was last updated on the: 2020-09-29 10:19:16
+## This file was last updated on the: 2020-09-30 10:19:09
 
 current_deaths <- here::here("data",
                                  "rds",
-                                 "deaths_2020-09-28.rds")
+                                 "deaths_2020-09-29.rds")
