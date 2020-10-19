@@ -35,11 +35,10 @@ jobs:
           options(install.packages.check.source = "no")
           pkgs <- c("remotes", "here", "dbplyr", "tidyverse", "xml2", "rvest", "cyphr", "rio", "ggplot2", "tidyr",
           "knitr", "tinytex", "withr", "checkpoint", "matchmaker", "epitrix")
-          install.packages("rlang")
           install.packages(pkgs, repos = "https://cloud.r-project.org/")
-          remotes::install_github("reconhub/reportfactory", dependencies = F)
-          remotes::install_github("reconhub/linelist", dependencies = F)
-          reportfactory::install_deps()
+          remotes::install_github("reconhub/reportfactory")
+          remotes::install_github("reconhub/linelist")
+          remotes::install_github("reconhub/projections")
         shell: Rscript {0}
  
       - name: Compile reports
