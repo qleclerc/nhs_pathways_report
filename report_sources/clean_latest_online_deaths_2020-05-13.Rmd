@@ -91,7 +91,7 @@ current_online_deaths <- fetch_url_online_deaths()
 
 #get the date of the latest data
 online_deaths_date <- strsplit(current_online_deaths, "total-announced-deaths")[[1]][2]
-online_deaths_date <- gsub("(2020).*","\\1", online_deaths_date)
+online_deaths_date <- gsub("(2021).*","\\1", online_deaths_date)
 online_deaths_date <- linelist::guess_dates(online_deaths_date)
 
 ```
