@@ -13,10 +13,13 @@ fetch_url_pathways_calls <- function() {
     rvest::html_attr("href")
   
   #search for our url (the filename always contains this string)
-  query_url = "NHS%20Pathways%20Covid-19%20data%202021"
+  query_url = "NHS%20Pathways%20Covid"
   url = grep(query_url, scraped_urls, value = T)
   
-  url
+  query_url2 = "%202021"
+  url2 = grep(query_url2, url, value = T)
+  
+  url2
 }
 
 fetch_url_pathways_online <- function() {
@@ -31,10 +34,13 @@ fetch_url_pathways_online <- function() {
     rvest::html_attr("href")
   
   #search for our url (the filename always contains this string)
-  query_url = "111%20Online%20Covid-19%20data_2021"
+  query_url = "111%20Online%20Covid"
   url = grep(query_url, scraped_urls, value = T)
   
-  url
+  query_url2 = "2021-"
+  url2 = grep(query_url2, url, value = T)
+
+  url2
 }
 
 
