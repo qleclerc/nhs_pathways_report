@@ -1,7 +1,7 @@
 ## This file is generated automatically by `clean_latest_pathways`
 ## Do not edit it by hand!
 
-## This file was last updated on the: 2021-01-29 10:29:06
+## This file was last updated on the: 2021-01-30 10:27:25
 
 current_pathways <- here::here("data",
                                  "rds",
