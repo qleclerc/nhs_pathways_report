@@ -19,6 +19,12 @@ fetch_url_pathways_calls <- function() {
   query_url2 = "%202021"
   url2 = grep(query_url2, url, value = T)
   
+  if(length(url2) == 0){
+    query_url2 = "data_2021"
+    url2 = grep(query_url2, url, value = T)
+    
+  }
+  
   url2
 }
 
