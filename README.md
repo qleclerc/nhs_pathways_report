@@ -1,3 +1,6 @@
+**NOTE: this repository is now discontinued, please see https://github.com/thibautjombart/nhs_pathways_monitoring for latest updates**
+
+
 
 ## Introduction
 
